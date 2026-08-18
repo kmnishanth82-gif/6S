@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>6S</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#23262B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="6S">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#F1EDE2; --paper-hi:#FAF8F1; --ink:#23262B; --steel:#4A5262; --steel-dk:#343A45;
+    --line:#D9D2C0; --yellow:#F5B700; --orange:#E85D2A; --green:#3E8F5C; --red:#C6402F; --card-radius:3px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .disp{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.03em;}
+  #app{max-width:480px; margin:0 auto; min-height:100vh; background:var(--paper); position:relative; padding-bottom:76px;}
+  .hazard{height:7px; background:repeating-linear-gradient(135deg,var(--yellow) 0 14px, var(--ink) 14px 28px); opacity:.9;}
+  header.top{background:var(--ink); color:var(--paper-hi); padding:16px 18px 14px;}
+  .badge-row{display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand .mark{width:34px; height:34px; border:2px solid var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--yellow); flex-shrink:0;}
+  .brand .mark svg{width:17px; height:17px;}
+  .brand h1{font-size:16px; margin:0; line-height:1.1;}
+  .brand .sub{font-size:10px; color:#9aa2ad; margin-top:2px; letter-spacing:.08em;}
+  .phase-pill{font-family:'Oswald',sans-serif; font-size:10.5px; letter-spacing:.06em; padding:5px 10px; border:1px solid var(--yellow); color:var(--yellow); border-radius:20px; white-space:nowrap;}
+  .bell-btn{position:relative; background:none; border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--paper-hi); cursor:pointer;}
+  .bell-btn svg{width:19px; height:19px;}
+  .bell-badge{position:absolute; top:1px; right:1px; background:var(--orange); color:#fff; font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600; min-width:15px; height:15px; border-radius:8px; display:flex; align-items:center; justify-content:center; padding:0 3px; border:1.5px solid var(--ink);}
+  .timeline{display:flex; gap:6px; margin-top:14px;}
+  .tl-seg{flex:1; height:5px; border-radius:3px; background:#4a505c; position:relative; overflow:hidden;}
+  .tl-seg .fill{position:absolute; inset:0; width:0%; transition:width .4s;}
+  .tl-labels{display:flex; justify-content:space-between; margin-top:6px; font-size:9.5px; color:#9aa2ad; letter-spacing:.05em;}
+  main{padding:16px;}
+  .section-title{font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:.08em; color:var(--steel-dk); margin:22px 0 10px; display:flex; align-items:center; gap:8px;}
+  .section-title::after{content:""; flex:1; height:1px; background:var(--line);}
+  .section-title:first-of-type{margin-top:0;}
+  .card{background:var(--paper-hi); border:1px solid var(--line); border-radius:var(--card-radius); padding:14px; position:relative;}
+  .gauge-wrap{display:flex; flex-direction:column; align-items:center; padding:18px 10px 6px;}
+  .gauge-num{font-family:'IBM Plex Mono',monospace; font-size:34px; font-weight:600; margin-top:-46px;}
+  .gauge-label{font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:.1em; color:var(--steel); margin-top:2px;}
+  .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px;}
+  .stat{background:var(--paper-hi); border:1px solid var(--line); border-radius:var(--card-radius); padding:10px 8px; text-align:center;}
+  .stat .n{font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600;}
+  .stat .l{font-size:9.5px; color:var(--steel); letter-spacing:.04em; margin-top:2px; text-transform:uppercase;}
+  .dept-card{display:flex; align-items:center; gap:12px; background:var(--paper-hi); border:1px solid var(--line); border-radius:var(--card-radius); padding:12px 14px; margin-bottom:9px; cursor:pointer; transition:transform .1s;}
+  .dept-card:active{transform:scale(.98);}
+  .dept-id{width:38px; height:38px; border-radius:50%; background:var(--steel-dk); color:var(--yellow); display:flex; align-items:center; justify-content:center; font-family:'Oswald',sans-serif; font-weight:600; font-size:14px; flex-shrink:0;}
+  .dept-info{flex:1; min-width:0;}
+  .dept-info .name{font-family:'Oswald',sans-serif; font-size:13.5px; letter-spacing:.02em;}
+  .dept-info .incharge{font-size:11.5px; color:var(--steel); margin-top:1px;}
+  .phase-dots{display:flex; gap:4px; flex-shrink:0;}
+  .dot{width:9px; height:9px; border-radius:50%; background:#DCD5C4; border:1px solid var(--line);}
+  .dot.done{background:var(--green); border-color:var(--green);}
+  .dot.active{background:var(--yellow); border-color:var(--yellow);}
+  button, .btn{font-family:'Oswald',sans-serif; letter-spacing:.05em; text-transform:uppercase; font-size:12px; border:none; cursor:pointer;}
+  .btn-primary{background:var(--ink); color:var(--yellow); padding:11px 16px; border-radius:3px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;}
+  .btn-primary:active{opacity:.85;}
+  .btn-outline{background:transparent; border:1.5px solid var(--ink); color:var(--ink); padding:9px 14px; border-radius:3px;}
+  .btn-sm{font-size:10.5px; padding:6px 10px; border-radius:3px;}
+  nav.bottom{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; background:var(--ink); display:flex; border-top:3px solid var(--yellow); z-index:50;}
+  nav.bottom .nb{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 2px 8px; color:#7d8492; background:none; border:none;}
+  nav.bottom .nb.active{color:var(--yellow);}
+  nav.bottom .nb svg{width:19px; height:19px;}
+  nav.bottom .nb span{font-family:'Oswald',sans-serif; font-size:8.6px; letter-spacing:.04em; text-transform:uppercase;}
+  .detail-header{background:var(--steel-dk); color:var(--paper-hi); padding:14px 16px 16px;}
+  .back-btn{display:flex; align-items:center; gap:6px; color:var(--yellow); font-family:'Oswald',sans-serif; font-size:11.5px; letter-spacing:.05em; background:none; border:none; padding:0; margin-bottom:10px;}
+  .detail-tabs{display:flex; gap:0; margin-top:14px; border-bottom:1px solid var(--line); background:var(--paper);}
+  .dtab{flex:1; text-align:center; padding:10px 2px; font-family:'Oswald',sans-serif; font-size:10.5px; letter-spacing:.03em; color:var(--steel); border-bottom:2px solid transparent; background:none; border-top:none;border-left:none;border-right:none; cursor:pointer;}
+  .dtab.active{color:var(--ink); border-bottom-color:var(--orange); font-weight:600;}
+  .entry{background:var(--paper-hi); border:1px solid var(--line); border-radius:3px; padding:12px; margin-bottom:10px;}
+  .entry-meta{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .entry-date{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--steel);}
+  .status-chip{font-family:'Oswald',sans-serif; font-size:9.5px; letter-spacing:.04em; padding:3px 8px; border-radius:10px; text-transform:uppercase;}
+  .status-open{background:#FBE3D0; color:var(--orange);}
+  .status-done{background:#DBEEE1; color:var(--green);}
+  .entry-text{font-size:13px; line-height:1.4;}
+  .form-block{margin-bottom:12px;}
+  .form-block label{display:block; font-family:'Oswald',sans-serif; font-size:10.5px; letter-spacing:.05em; color:var(--steel); margin-bottom:5px; text-transform:uppercase;}
+  textarea, input[type=text], input[type=date], select{width:100%; border:1px solid var(--line); background:var(--paper-hi); border-radius:3px; padding:9px 10px; font-family:'Inter',sans-serif; font-size:13px; color:var(--ink);}
+  textarea{min-height:64px; resize:vertical;}
+  .upload-btn{border:1.5px dashed var(--steel); background:var(--paper-hi); border-radius:3px; padding:14px; text-align:center; font-family:'Oswald',sans-serif; font-size:10.5px; letter-spacing:.05em; color:var(--steel); cursor:pointer; position:relative; display:block;}
+  .upload-btn input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .thumb-preview{width:100%; height:110px; object-fit:cover; border-radius:3px; margin-top:6px;}
+  .img-row{display:flex; gap:8px; margin-top:8px;}
+  .img-box{flex:1; position:relative;}
+  .img-box img{width:100%; height:90px; object-fit:cover; border-radius:3px; border:1px solid var(--line);}
+  .img-box .cap{font-family:'Oswald',sans-serif; font-size:9px; letter-spacing:.06em; color:var(--steel); text-align:center; margin-top:3px; text-transform:uppercase;}
+  .entry-img{width:100%; max-height:160px; object-fit:cover; border-radius:3px; margin-top:8px; border:1px solid var(--line);}
+  .s-cat{margin-bottom:16px;}
+  .s-cat-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;}
+  .s-cat-name{font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:.03em;}
+  .s-cat-val{font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:600;}
+  .stars{display:flex; gap:4px;}
+  .star{width:30px; height:30px; border-radius:4px; background:#E4DFD0; display:flex; align-items:center; justify-content:center; font-family:'Oswald',sans-serif; font-size:12px; color:var(--steel); cursor:pointer; border:1px solid var(--line);}
+  .star.on{background:var(--yellow); color:var(--ink); border-color:var(--yellow);}
+  .modal-bg{position:fixed; inset:0; background:rgba(35,38,43,.55); z-index:100; display:flex; align-items:flex-end;}
+  .modal-bg.center{align-items:center; padding:20px;}
+  .modal-sheet{background:var(--paper); width:100%; max-width:480px; margin:0 auto; border-radius:12px 12px 0 0; max-height:88vh; overflow-y:auto; padding:18px 18px 26px;}
+  .modal-sheet.card-modal{border-radius:8px; max-height:90vh;}
+  .modal-handle{width:38px; height:4px; background:var(--line); border-radius:2px; margin:0 auto 14px;}
+  .empty-state{text-align:center; padding:34px 18px; color:var(--steel);}
+  .empty-state .ico{font-size:30px; margin-bottom:8px;}
+  .empty-state p{font-size:12.5px; line-height:1.5; margin:4px 0 0;}
+  .leader-row{display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--line);}
+  .leader-row:last-child{border-bottom:none;}
+  .reviewer-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 0; border-bottom:1px solid var(--line);}
+  .reviewer-row:last-child{border-bottom:none;}
+  .rank-num{font-family:'IBM Plex Mono',monospace; font-size:13px; width:20px; color:var(--steel);}
+  .leader-bar-track{flex:1; height:8px; background:#E4DFD0; border-radius:4px; overflow:hidden;}
+  .leader-bar-fill{height:100%; border-radius:4px;}
+  .leader-pct{font-family:'IBM Plex Mono',monospace; font-size:12px; width:36px; text-align:right;}
+  .chk-row{display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;}
+  .chk-row:last-child{border-bottom:none;}
+  .chk-box{width:19px; height:19px; border:1.5px solid var(--steel); border-radius:3px; flex-shrink:0; display:flex; align-items:center; justify-content:center;}
+  .chk-box.on{background:var(--green); border-color:var(--green); color:#fff; font-size:12px;}
+  .alert-row{display:flex; align-items:flex-start; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line); cursor:pointer;}
+  .alert-row:last-child{border-bottom:none;}
+  .alert-row:active{opacity:.7;}
+  .alert-dot{width:9px; height:9px; border-radius:50%; margin-top:4px; flex-shrink:0;}
+  .alert-dot.red{background:var(--red);} .alert-dot.orange{background:var(--orange);} .alert-dot.yellow{background:var(--yellow);}
+  .alert-text{font-size:13px; line-height:1.4;}
+  .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--yellow); font-family:'Oswald',sans-serif; font-size:11.5px; letter-spacing:.04em; padding:9px 16px; border-radius:20px; z-index:200; opacity:0; transition:opacity .25s; pointer-events:none;}
+  .toast.show{opacity:1;}
+  .loading-scr{display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:12px; color:var(--steel); padding:0 30px; text-align:center;}
+  .spin{width:26px; height:26px; border:3px solid var(--line); border-top-color:var(--orange); border-radius:50%; animation:sp 0.8s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  .setup-scr{max-width:440px; margin:0 auto; min-height:100vh; padding:40px 22px; display:flex; flex-direction:column; justify-content:center;}
+  .setup-scr .mark{width:52px; height:52px; border:3px solid var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--ink); font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; margin-bottom:18px;}
+  .link-btn{background:none; border:none; color:var(--steel); font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:.04em; text-decoration:underline; cursor:pointer; padding:0;}
+  .upload-btn{border:1.5px dashed var(--steel); background:var(--paper-hi); border-radius:3px; padding:14px; text-align:center; font-family:'Oswald',sans-serif; font-size:10.5px; letter-spacing:.05em; color:var(--steel); cursor:pointer; position:relative;}
+  .upload-btn input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .thumb-preview{width:100%; height:110px; object-fit:cover; border-radius:3px; margin-top:6px;}
+  .img-row{display:flex; gap:8px; margin-top:8px;}
+  .img-box{flex:1; position:relative;}
+  .img-box img{width:100%; height:90px; object-fit:cover; border-radius:3px; border:1px solid var(--line);}
+  .img-box .cap{font-family:'Oswald',sans-serif; font-size:9px; letter-spacing:.06em; color:var(--steel); text-align:center; margin-top:3px; text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading-scr"><div class="spin"></div><div class="mono" style="font-size:11px;">LOADING 6S DATA…</div></div></div>
+
+<script>
+/* ============ DATA MODEL ============ */
+const DEPARTMENTS = [
+  {id:'cutting-fusing', name:'Cutting & Fusing', incharge:'Kalidurai'},
+  {id:'fabric-store', name:'Fabric Store', incharge:'Rishi', reportsTo:'Rajeev'},
+  {id:'fabric-inspection', name:'Fabric Inspection', incharge:'Ashik'},
+  {id:'accessories-store', name:'Accessories Store', incharge:'Santhose', reportsTo:'Rajeev'},
+  {id:'production', name:'Production', incharge:'Murugan', assist:'Nagaraj'},
+  {id:'finishing', name:'Finishing', incharge:'Rajesh T & Subhash'},
+  {id:'office-canteen', name:'Office / Canteen / Surrounding', incharge:'Boopathi'},
+  {id:'lab', name:'Lab', incharge:'Arunkumar'},
+  {id:'maintenance', name:'Maintenance', incharge:'Selva'},
+];
+const TEAM_LEADER = 'Rajesh P R';
+const COORDINATOR = 'Nishanth';
+const S_CATS = [
+  {k:'sort', label:'Sort'},{k:'setInOrder', label:'Set in Order'},{k:'shine', label:'Shine'},
+  {k:'standardize', label:'Standardize'},{k:'sustain', label:'Sustain'},{k:'safety', label:'Safety'},
+];
+const PHASES = ['Identification','Execution','Standardization'];
+const PHASE_COLORS = ['var(--orange)','var(--yellow)','var(--green)'];
+const REVIEWERS = [
+  {key:'teamLeader', label:'Team Leader', sub:TEAM_LEADER},
+  {key:'hoRep1', label:'HO Representative 1', sub:'Head Office'},
+  {key:'hoRep2', label:'HO Representative 2', sub:'Head Office'},
+];
+
+let STATE = {
+  view:'home', activeDept:null, detailTab:'observe', startDate:null,
+  deptData:{}, meetings:[], sheetsUrl:'',
+};
+
+function emptyDeptData(){
+  return {observations:[],executions:[],standardization:{sop:'',checklist:[
+    {id:'c1',text:'Area layout finalized & marked',done:false},
+    {id:'c2',text:'Labels / signage installed',done:false},
+    {id:'c3',text:'Cleaning schedule posted',done:false},
+    {id:'c4',text:'SOP displayed at workstation',done:false},
+    {id:'c5',text:'Responsible person assigned',done:false},
+  ],signedOff:false,signedBy:'',date:''},scores:{},verifications:[]};
+}
+
+/* ============ GOOGLE SHEET BACKEND (replaces window.storage) ============ */
+function sheetsBase(){ return STATE.sheetsUrl; }
+async function kvGet(key){
+  try{
+    const res = await fetch(sheetsBase() + (sheetsBase().includes('?')?'&':'?') + 'action=kvget&key=' + encodeURIComponent(key));
+    const data = await res.json();
+    return (data && data.found) ? data.value : null;
+  }catch(e){ return null; }
+}
+async function kvSet(key, value){
+  try{
+    await fetch(sheetsBase(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'kvset', key, value})});
+    return true;
+  }catch(e){ showToast('Could not save to sheet — check connection'); return false; }
+}
+async function pushRow(sheetName, row){
+  try{
+    await fetch(sheetsBase(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({sheet:sheetName, row})});
+  }catch(e){ /* best-effort log, never blocks */ }
+}
+function compressImage(file, maxW=900, quality=0.6){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w=img.width, h=img.height;
+        if(w>maxW){ h=Math.round(h*(maxW/w)); w=maxW; }
+        const canvas = document.createElement('canvas'); canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject; img.src = e.target.result;
+    };
+    reader.onerror = reject; reader.readAsDataURL(file);
+  });
+}
+async function uploadImageToDrive(dataUrl, filename){
+  const base64 = dataUrl.split(',')[1];
+  try{
+    const res = await fetch(sheetsBase(), {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'uploadImage', data:base64, filename, mimeType:'image/jpeg'})
+    });
+    const out = await res.json();
+    return out && out.status==='ok' ? out.url : null;
+  }catch(e){ return null; }
+}
+function setupImagePreview(inputId, previewId){
+  document.getElementById(inputId).addEventListener('change', async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    showToast('Processing photo…');
+    try{
+      const dataUrl = await compressImage(file);
+      const img = document.getElementById(previewId);
+      img.src = dataUrl; img.style.display='block'; img.dataset.img = dataUrl;
+    }catch(err){ showToast('Could not process photo'); }
+  });
+}
+async function loadAll(){
+  STATE.startDate = await kvGet('program-start-date');
+  if(!STATE.startDate){ STATE.startDate = new Date().toISOString().slice(0,10); await kvSet('program-start-date', STATE.startDate); }
+  for(const d of DEPARTMENTS){
+    const v = await kvGet('dept-data:'+d.id);
+    STATE.deptData[d.id] = v || emptyDeptData();
+  }
+  STATE.meetings = (await kvGet('meetings')) || [];
+}
+// These three are the SAFE way to write shared/concurrent data: each one asks the
+// Sheet backend to make a narrow, locked change to only the field in question,
+// rather than sending our whole (possibly stale) local copy and overwriting
+// whatever anyone else just saved. Never re-introduce a plain whole-blob "kvSet"
+// for dept-data or meetings — that's exactly the pattern that causes lost updates
+// when two people save around the same time.
+async function kvAppend(key, path, item){
+  try{
+    await fetch(sheetsBase(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'kvappend', key, path, item})});
+    return true;
+  }catch(e){ showToast('Could not save — check connection'); return false; }
+}
+async function kvUpdateArrayItem(key, arrayPath, itemId, patch){
+  try{
+    await fetch(sheetsBase(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'kvupdatearrayitem', key, arrayPath, itemId, patch})});
+    return true;
+  }catch(e){ showToast('Could not save — check connection'); return false; }
+}
+async function kvMergePath(key, path, patch){
+  try{
+    await fetch(sheetsBase(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'kvmergepath', key, path, patch})});
+    return true;
+  }catch(e){ showToast('Could not save — check connection'); return false; }
+}
+
+/* ============ UTIL ============ */
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function today(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(d){ if(!d) return ''; const dt = new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function showToast(msg){
+  let t = document.getElementById('toast');
+  if(!t){ t = document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function currentPhaseIndex(){
+  const start = new Date(STATE.startDate+'T00:00:00'); const now = new Date();
+  const days = Math.floor((now-start)/86400000);
+  if(days < 30) return 0; if(days < 60) return 1; return 2;
+}
+function daysIntoProgram(){
+  const start = new Date(STATE.startDate+'T00:00:00'); const now = new Date();
+  return Math.max(0, Math.floor((now-start)/86400000));
+}
+function daysSince(dateStr){ return Math.floor((new Date() - new Date(dateStr+'T00:00:00'))/86400000); }
+function reviewerTotal(scoreObj){ if(!scoreObj) return null; return S_CATS.reduce((sum,c)=> sum + (scoreObj[c.k]||0), 0); }
+function deptScorePct(deptId){
+  const s = STATE.deptData[deptId].scores||{};
+  const totals = REVIEWERS.map(r=> reviewerTotal(s[r.key])).filter(v=>v!==null);
+  if(!totals.length) return 0;
+  return Math.round((totals.reduce((a,b)=>a+b,0)/totals.length/30)*100);
+}
+function deptHasScore(deptId){ const s = STATE.deptData[deptId].scores||{}; return REVIEWERS.some(r=> s[r.key]); }
+function deptReviewerCount(deptId){ const s = STATE.deptData[deptId].scores||{}; return REVIEWERS.filter(r=> s[r.key]).length; }
+function overallAvgScore(){
+  const scored = DEPARTMENTS.filter(d=>deptHasScore(d.id));
+  if(!scored.length) return 0;
+  return Math.round(scored.reduce((a,d)=>a+deptScorePct(d.id),0)/scored.length);
+}
+function deptPhaseProgress(deptId){
+  const dd = STATE.deptData[deptId];
+  const p1 = dd.observations.length>0;
+  const p2 = dd.executions.length>0 && dd.executions.some(e=>e.status==='done');
+  const p3 = dd.standardization.signedOff;
+  return [p1,p2,p3];
+}
+function escapeHTML(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function emptyState(title, sub){ return `<div class="empty-state"><div class="ico">◻</div><div class="disp" style="font-size:12.5px;">${title}</div><p>${sub}</p></div>`; }
+
+/* ============ ICONS ============ */
+const ICONS = {
+  home:'<path d="M3 11.5 12 4l9 7.5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 10v9a1 1 0 0 0 1 1H17.5a1 1 0 0 0 1-1v-9" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/>',
+  grid:'<rect x="3.5" y="3.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="13.5" y="3.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="3.5" y="13.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="13.5" y="13.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8" fill="none"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  shield:'<path d="M12 3 4.5 6v6c0 5 3.4 8 7.5 9 4.1-1 7.5-4 7.5-9V6L12 3Z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  gauge:'<path d="M4 15.5A8.5 8.5 0 1 1 20 15.5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M12 15.5 15.5 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="15.5" r="1.3" fill="currentColor"/>',
+  plus:'<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  back:'<path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  bell:'<path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M10 18.5a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>',
+  camera:'<path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+};
+function ico(name, cls){ return `<svg class="${cls||''}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${ICONS[name]}</svg>`; }
+
+/* ============ ALERTS ============ */
+function generateAlerts(){
+  const alerts = []; const phaseIdx = currentPhaseIndex(); const days = daysIntoProgram();
+  DEPARTMENTS.forEach(d=>{
+    const dd = STATE.deptData[d.id];
+    const openCount = dd.executions.filter(e=>e.status!=='done').length;
+    if(openCount>0) alerts.push({sev:'orange', text:`${openCount} open action${openCount>1?'s':''} in ${d.name}`, dept:d.id, tab:'execute'});
+    if(days<=3 && phaseIdx===0 && dd.observations.length===0) alerts.push({sev:'yellow', text:`No baseline photo yet for ${d.name} — capture how it looks now, before changes begin`, dept:d.id, tab:'observe'});
+    if(days>=28 && phaseIdx===0 && dd.observations.length===0) alerts.push({sev:'red', text:`No observations logged yet in ${d.name} — Month 1 closing soon`, dept:d.id, tab:'observe'});
+    if(phaseIdx===2 && !dd.standardization.signedOff) alerts.push({sev:'red', text:`Standardization not signed off in ${d.name}`, dept:d.id, tab:'standard'});
+    const lastV = dd.verifications[dd.verifications.length-1];
+    if(lastV && lastV.status==='needs-work' && !lastV.resolved){
+      const stale = daysSince(lastV.date) > 5;
+      alerts.push({sev:stale?'red':'orange', text:`${d.name} flagged "needs work" by ${lastV.reviewer}${stale?' — open '+daysSince(lastV.date)+' days, unresolved':''}`, dept:d.id, view:'verify'});
+    }
+  });
+  if(STATE.meetings.length===0 || daysSince(STATE.meetings[STATE.meetings.length-1].date) > 7) alerts.push({sev:'yellow', text:'No team meeting logged in the last 7 days', view:'meetings'});
+  return alerts;
+}
+
+/* ============ RENDER: SHELL ============ */
+function render(){
+  const app = document.getElementById('app');
+  let body = '';
+  if(STATE.view==='home') body = renderHome();
+  else if(STATE.view==='depts') body = renderDeptList();
+  else if(STATE.view==='deptDetail') body = renderDeptDetail();
+  else if(STATE.view==='meetings') body = renderMeetings();
+  else if(STATE.view==='verify') body = renderVerify();
+  else if(STATE.view==='score') body = renderScore();
+  const showTopHeader = STATE.view!=='deptDetail';
+  app.innerHTML = `${showTopHeader ? headerHTML() : ''}<main style="${showTopHeader?'':'padding:0;'}">${body}</main>${bottomNavHTML()}`;
+  attachGlobalHandlers();
+}
+function headerHTML(){
+  const phaseIdx = currentPhaseIndex(); const days = daysIntoProgram(); const alertCount = generateAlerts().length;
+  const fills = [0,1,2].map(i=>{ let pct=0; if(i<phaseIdx) pct=100; else if(i===phaseIdx) pct=Math.min(100, Math.max(4,((days-i*30)/30)*100)); return pct; });
+  return `
+  <header class="top">
+    <div class="badge-row">
+      <div class="brand"><div class="mark">${ico('shield')}</div><div><h1 class="disp">6S</h1><div class="sub mono">DAY ${days} OF 90</div></div></div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="bell-btn" id="open-alerts">${ico('bell')}${alertCount>0?`<span class="bell-badge">${alertCount>9?'9+':alertCount}</span>`:''}</button>
+        <div class="phase-pill disp">${PHASES[phaseIdx]}</div>
+      </div>
+    </div>
+    <div class="timeline">${[0,1,2].map(i=>`<div class="tl-seg"><div class="fill" style="width:${fills[i]}%; background:${PHASE_COLORS[i]}"></div></div>`).join('')}</div>
+    <div class="tl-labels disp"><span>M1 · Identify</span><span>M2 · Execute</span><span>M3 · Standardize</span></div>
+  </header>
+  <div class="hazard"></div>`;
+}
+function bottomNavHTML(){
+  const tabs = [{v:'home',ic:'home',l:'Home'},{v:'depts',ic:'grid',l:'Depts'},{v:'meetings',ic:'calendar',l:'Meet'},{v:'verify',ic:'shield',l:'Verify'},{v:'score',ic:'gauge',l:'Score'}];
+  return `<nav class="bottom">${tabs.map(t=>`<button class="nb ${STATE.view===t.v||(t.v==='depts'&&STATE.view==='deptDetail')?'active':''}" data-nav="${t.v}">${ico(t.ic)}<span>${t.l}</span></button>`).join('')}</nav>`;
+}
+
+/* ============ RENDER: HOME ============ */
+function renderHome(){
+  const overall = overallAvgScore();
+  const gaugeColor = overall>=80?'var(--green)':overall>=50?'var(--yellow)':'var(--orange)';
+  const totalObs = DEPARTMENTS.reduce((a,d)=>a+STATE.deptData[d.id].observations.length,0);
+  const p3done = DEPARTMENTS.filter(d=>STATE.deptData[d.id].standardization.signedOff).length;
+  const openIssues = DEPARTMENTS.reduce((a,d)=>a+STATE.deptData[d.id].executions.filter(e=>e.status!=='done').length,0);
+  return `
+  <div class="section-title">Program Pulse</div>
+  <div class="card">
+    <div class="gauge-wrap">${gaugeSVG(overall, gaugeColor)}<div class="gauge-num mono" style="color:${gaugeColor}">${overall}%</div><div class="gauge-label">Average 6S Score</div></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="n mono">${totalObs}</div><div class="l">Observations</div></div>
+      <div class="stat"><div class="n mono" style="color:${openIssues?'var(--orange)':'var(--green)'}">${openIssues}</div><div class="l">Open Issues</div></div>
+      <div class="stat"><div class="n mono">${p3done}/9</div><div class="l">Standardized</div></div>
+    </div>
+  </div>
+  <div class="section-title">Department Status</div>
+  ${DEPARTMENTS.map(deptRowMini).join('')}
+  <div class="section-title">Team</div>
+  <div class="card" style="font-size:12.5px; line-height:1.9;">
+    <div><b>Team Leader:</b> ${TEAM_LEADER}</div>
+    <div><b>Organizer:</b> Rajeev</div>
+    <div><b>Coordinator:</b> ${COORDINATOR}</div>
+    <div><b>Review:</b> Team Leader + 2 HO Representatives</div>
+  </div>
+  <div style="text-align:center; margin-top:22px;">
+    <button class="link-btn" id="change-sheet">Change Google Sheet Connection</button>
+  </div>
+  `;
+}
+function gaugeSVG(pct,color){
+  const r=54, cx=90, cy=64; const angle = Math.PI - (pct/100)*Math.PI;
+  function arcPoint(a){ return [cx+r*Math.cos(a), cy - r*Math.sin(a)]; }
+  const [x1,y1]=arcPoint(Math.PI), [x2,y2]=arcPoint(0), [nx,ny]=arcPoint(angle);
+  const needleX = cx + r*0.86*Math.cos(angle), needleY = cy - r*0.86*Math.sin(angle);
+  return `<svg width="180" height="76" viewBox="0 0 180 76">
+    <path d="M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}" stroke="#DCD5C4" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M ${x1} ${y1} A ${r} ${r} 0 0 1 ${nx} ${ny}" stroke="${color}" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <line x1="${cx}" y1="${cy}" x2="${needleX}" y2="${needleY}" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="4" fill="var(--ink)"/>
+  </svg>`;
+}
+function deptRowMini(d){
+  const dots = deptPhaseProgress(d.id);
+  return `<div class="dept-card" data-open-dept="${d.id}">
+    <div class="dept-id">${d.name.split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
+    <div class="dept-info"><div class="name">${d.name}</div><div class="incharge">${d.incharge}${d.assist?` · Asst: ${d.assist}`:''}</div></div>
+    <div class="phase-dots">${dots.map((on,i)=>`<div class="dot ${on?'done':(i===currentPhaseIndex()?'active':'')}"></div>`).join('')}</div>
+  </div>`;
+}
+
+/* ============ RENDER: DEPT LIST ============ */
+function renderDeptList(){ return `<div class="section-title">All Departments</div>${DEPARTMENTS.map(deptRowMini).join('')}<div style="height:8px"></div>`; }
+
+/* ============ RENDER: DEPT DETAIL ============ */
+function renderDeptDetail(){
+  const d = DEPARTMENTS.find(x=>x.id===STATE.activeDept); const dd = STATE.deptData[d.id];
+  const tabs = [{k:'observe',l:'Observe'},{k:'execute',l:'Execute'},{k:'photos',l:'Photos'},{k:'standard',l:'Standardize'},{k:'score',l:'Score'}];
+  let tabBody = '';
+  if(STATE.detailTab==='observe') tabBody = renderObserveTab(d, dd);
+  else if(STATE.detailTab==='execute') tabBody = renderExecuteTab(d, dd);
+  else if(STATE.detailTab==='photos') tabBody = renderPhotosTab(d, dd);
+  else if(STATE.detailTab==='standard') tabBody = renderStandardTab(d, dd);
+  else if(STATE.detailTab==='score') tabBody = renderScoreTab(d, dd);
+  return `
+  <div class="detail-header">
+    <button class="back-btn" data-nav="depts">${ico('back')} BACK TO DEPARTMENTS</button>
+    <div class="disp" style="font-size:17px;">${d.name}</div>
+    <div class="mono" style="font-size:11px; color:#9aa2ad; margin-top:2px;">Incharge: ${d.incharge}${d.assist?` · Asst: ${d.assist}`:''}${d.reportsTo?` · Organizer: ${d.reportsTo}`:''}</div>
+    <div class="detail-tabs">${tabs.map(t=>`<button class="dtab ${STATE.detailTab===t.k?'active':''}" data-dtab="${t.k}">${t.l}</button>`).join('')}</div>
+  </div>
+  <main>${tabBody}</main>`;
+}
+function renderObserveTab(d,dd){
+  const list = dd.observations.slice().reverse();
+  return `<button class="btn-primary" id="add-observation" style="margin-bottom:14px;">${ico('plus')} New Observation</button>
+  ${list.length===0 ? emptyState('No observations logged yet','Record what needs to change during Month 1 identification walk-throughs.') :
+    list.map(o=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(o.date)}</span><span class="status-chip ${o.priority==='high'?'status-open':'status-done'}">${o.priority} priority</span></div><div class="entry-text">${escapeHTML(o.text)}</div>${o.image?`<img src="${o.image}" class="entry-img">`:''}</div>`).join('')}`;
+}
+function renderExecuteTab(d,dd){
+  const list = dd.executions.slice().reverse();
+  return `<button class="btn-primary" id="add-execution" style="margin-bottom:14px;">${ico('plus')} New Action</button>
+  ${list.length===0 ? emptyState('No execution entries yet','Log corrective actions during Month 2.') :
+    list.map(e=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(e.date)}</span><span class="status-chip ${e.status==='done'?'status-done':'status-open'}">${e.status==='done'?'Completed':'In Progress'}</span></div><div class="entry-text">${escapeHTML(e.text)}</div>${(e.beforeImage||e.afterImage)?`<div class="img-row"><div class="img-box">${e.beforeImage?`<img src="${e.beforeImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">Before</div></div><div class="img-box">${e.afterImage?`<img src="${e.afterImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">After</div></div></div>`:''}${e.status!=='done'?`<button class="btn-outline btn-sm" style="margin-top:9px;" data-mark-done="${e.id}">Mark Completed</button>`:''}</div>`).join('')}`;
+}
+function renderPhotosTab(d,dd){
+  const items = [];
+  dd.observations.forEach(o=>{ if(o.image) items.push({date:o.date, label:'Observation', sub:o.text, img:o.image}); });
+  dd.executions.forEach(e=>{
+    if(e.beforeImage) items.push({date:e.date, label:'Before', sub:e.text, img:e.beforeImage});
+    if(e.afterImage) items.push({date:e.date, label:'After', sub:e.text, img:e.afterImage});
+  });
+  items.sort((a,b)=> a.date.localeCompare(b.date));
+  if(items.length===0) return emptyState('No photos yet', 'Photos added in Observe or Execute will appear here as a timeline, oldest to newest — useful for a before/after view across the full 90 days.');
+  return `<div style="font-size:11.5px; color:var(--steel); margin-bottom:14px; line-height:1.5;">${items.length} photo${items.length>1?'s':''}, oldest to newest — a visual record of change in this department.</div>
+    ${items.map(it=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(it.date)}</span><span class="status-chip ${it.label==='After'?'status-done':it.label==='Before'?'status-open':'status-done'}">${it.label}</span></div><img src="${it.img}" style="width:100%; max-height:220px; object-fit:cover; border-radius:3px; border:1px solid var(--line);">${it.sub?`<div class="entry-text" style="margin-top:8px;">${escapeHTML(it.sub)}</div>`:''}</div>`).join('')}`;
+}
+function renderStandardTab(d,dd){
+  const st = dd.standardization;
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="form-block"><label>Standard Operating Note</label><textarea id="sop-text" placeholder="Describe the standard to be sustained...">${escapeHTML(st.sop||'')}</textarea></div>
+    <div class="form-block" style="margin-bottom:6px;"><label>Sustain Checklist</label>
+      ${st.checklist.map(c=>`<div class="chk-row"><div class="chk-box ${c.done?'on':''}" data-chk="${c.id}">${c.done?'✓':''}</div><span style="${c.done?'text-decoration:line-through; color:var(--steel);':''}">${escapeHTML(c.text)}</span></div>`).join('')}
+    </div>
+    ${st.signedOff ? `<div class="status-chip status-done" style="display:inline-block; margin-top:6px;">Signed off by ${escapeHTML(st.signedBy)} · ${fmtDate(st.date)}</div>`
+      : `<div class="form-block" style="margin-top:10px;"><label>Sign Off (Team Leader / Incharge name)</label><input type="text" id="signoff-name" placeholder="Enter name to sign off"></div>
+      <button class="btn-primary" id="save-standard">Save & Sign Off Standard</button>`}
+  </div>
+  <button class="btn-outline" id="save-sop-draft" style="width:100%;">Save Draft (without signing off)</button>`;
+}
+function renderScoreTab(d,dd){
+  const s = dd.scores||{}; const pct = deptScorePct(d.id); const count = deptReviewerCount(d.id);
+  return `<div class="card" style="margin-bottom:10px;">
+    <div style="font-size:11.5px; color:var(--steel); line-height:1.55; margin-bottom:12px;">Scored independently by the Team Leader and 2 HO Representatives only — ${d.incharge.split(' ')[0]}'s department cannot rate itself.</div>
+    ${REVIEWERS.map(r=>{
+      const rs = s[r.key]; const total = reviewerTotal(rs);
+      return `<div class="reviewer-row"><div style="min-width:0;"><div class="disp" style="font-size:12px;">${r.label}</div>${rs?`<div class="mono" style="font-size:11px; color:var(--steel);">${escapeHTML(rs._name||'')} · ${total}/30 · ${fmtDate(rs._date)}</div>`:`<div style="font-size:11px; color:var(--steel);">Not yet rated</div>`}</div><button class="btn-outline btn-sm" data-score-reviewer="${r.key}">${rs?'Edit':'Rate'}</button></div>`;
+    }).join('')}
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);"><span class="disp" style="font-size:12px; color:var(--steel);">Average Score (${count}/3 rated)</span><span class="mono" style="font-size:20px; font-weight:600;">${pct}%</span></div>
+  </div>`;
+}
+
+/* ============ RENDER: MEETINGS ============ */
+function renderMeetings(){
+  const list = STATE.meetings.slice().reverse();
+  return `<div class="section-title">Team Meetings</div>
+  <button class="btn-primary" id="add-meeting" style="margin-bottom:14px;">${ico('plus')} Log New Meeting</button>
+  ${list.length===0 ? emptyState('No meetings logged','Record daily/weekly review meetings with the team leader and HO representatives.') :
+   list.map(m=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(m.date)}</span><span class="status-chip status-done">${m.attendees.length} attendees</span></div><div class="entry-text" style="margin-bottom:6px;"><b>Notes:</b> ${escapeHTML(m.notes)}</div>${m.actionItems?`<div class="entry-text"><b>Action items:</b> ${escapeHTML(m.actionItems)}</div>`:''}<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:5px;">${m.attendees.map(a=>`<span class="status-chip" style="background:#EDE9DC; color:var(--steel-dk);">${escapeHTML(a)}</span>`).join('')}</div></div>`).join('')}`;
+}
+
+/* ============ RENDER: VERIFY ============ */
+function renderVerify(){
+  return `<div class="section-title">Verification & Review</div>
+  <p style="font-size:12px; color:var(--steel); margin:-4px 0 14px; line-height:1.5;">Reviewed by Team Leader (${TEAM_LEADER}) and 2 HO representatives at each stage.</p>
+  ${DEPARTMENTS.map(d=>{
+    const dd = STATE.deptData[d.id]; const lastV = dd.verifications[dd.verifications.length-1];
+    const needsWorkOpen = lastV && lastV.status==='needs-work' && !lastV.resolved;
+    return `<div class="card" style="margin-bottom:10px;"><div style="display:flex; justify-content:space-between; align-items:center;"><div><div class="disp" style="font-size:12.5px;">${d.name}</div><div style="font-size:11px; color:var(--steel);">${d.incharge}</div></div><button class="btn-outline btn-sm" data-add-verify="${d.id}">Add Review</button></div>
+    ${lastV?`<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);"><div class="entry-meta"><span class="entry-date mono">${fmtDate(lastV.date)} · ${escapeHTML(lastV.reviewer)}</span><span class="status-chip ${lastV.status==='approved'?'status-done':(lastV.resolved?'status-done':'status-open')}">${lastV.status==='approved'?'Approved':(lastV.resolved?'Resolved':'Needs Work')}</span></div><div class="entry-text" style="font-size:12.5px;">${escapeHTML(lastV.comment)}</div>${needsWorkOpen?`<button class="btn-outline btn-sm" style="margin-top:9px;" data-resolve-verify="${d.id}" data-verify-id="${lastV.id}">Mark Resolved</button>`:''}</div>`:`<div style="margin-top:8px; font-size:11.5px; color:var(--steel);">No reviews yet.</div>`}</div>`;
+  }).join('')}`;
+}
+
+/* ============ RENDER: SCORE / AUDIT ============ */
+function renderScore(){
+  const ranked = DEPARTMENTS.map(d=>({d, pct:deptScorePct(d.id), scored:deptHasScore(d.id)})).sort((a,b)=>b.pct-a.pct);
+  const top = ranked.find(r=>r.scored);
+  return `
+  <button class="btn-outline" id="export-data" style="width:100%; margin-bottom:14px;">${ico('grid')} Export Full Data (Excel)</button>
+  <div class="section-title">Audit Leaderboard</div>
+  <div class="card">${ranked.map((r,i)=>`<div class="leader-row"><span class="rank-num">${i+1}</span><div style="flex:1;"><div style="font-size:12.5px; font-family:'Oswald',sans-serif;">${r.d.name}</div><div class="leader-bar-track" style="margin-top:4px;"><div class="leader-bar-fill" style="width:${r.scored?r.pct:0}%; background:${r.pct>=80?'var(--green)':r.pct>=50?'var(--yellow)':'var(--orange)'}"></div></div></div><span class="leader-pct mono">${r.scored?r.pct+'%':'—'}</span></div>`).join('')}</div>
+  ${top?`<div class="card" style="margin-top:12px; border-color:var(--yellow); border-width:1.5px;"><div style="display:flex; align-items:center; gap:10px;"><div style="font-size:22px;">🏆</div><div><div class="disp" style="font-size:12.5px;">Leading Team</div><div style="font-size:13px; margin-top:1px;">${top.d.name} — ${top.pct}%</div></div></div></div>`:''}
+  <div class="section-title">Score by Category</div>
+  <div class="card">${S_CATS.map(c=>{
+    let sum=0,n=0; DEPARTMENTS.forEach(d=>{ const s=STATE.deptData[d.id].scores||{}; REVIEWERS.forEach(r=>{ if(s[r.key]&&s[r.key][c.k]){ sum+=s[r.key][c.k]; n++; } }); });
+    const avg = n?(sum/n):0;
+    return `<div class="s-cat"><div class="s-cat-top"><span class="s-cat-name">${c.label}</span><span class="s-cat-val mono">${avg.toFixed(1)}/5</span></div><div class="leader-bar-track"><div class="leader-bar-fill" style="width:${(avg/5)*100}%; background:var(--steel)"></div></div></div>`;
+  }).join('')}</div>`;
+}
+
+/* ============ EXPORT ============ */
+function exportData(){
+  if(typeof XLSX === 'undefined'){ showToast('Export library did not load — check connection'); return; }
+  try{
+    const wb = XLSX.utils.book_new();
+    const overviewRows = DEPARTMENTS.map(d=>{
+      const dd = STATE.deptData[d.id]; const [p1,p2,p3] = deptPhaseProgress(d.id);
+      return {'Department':d.name,'Incharge':d.incharge,'Assistant':d.assist||'','Organizer':d.reportsTo||'','Observations Logged':dd.observations.length,'Open Actions':dd.executions.filter(e=>e.status!=='done').length,'Completed Actions':dd.executions.filter(e=>e.status==='done').length,'Phase 1 Started':p1?'Yes':'No','Phase 2 Underway':p2?'Yes':'No','Phase 3 Signed Off':p3?'Yes':'No','Score (%)':deptHasScore(d.id)?deptScorePct(d.id):''};
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(overviewRows), 'Department Overview');
+    const obsRows = []; DEPARTMENTS.forEach(d=> STATE.deptData[d.id].observations.forEach(o=> obsRows.push({'Department':d.name,'Date':fmtDate(o.date),'Priority':o.priority,'Observation':o.text,'Photo URL':o.image||''})));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(obsRows), 'Observations');
+    const execRows = []; DEPARTMENTS.forEach(d=> STATE.deptData[d.id].executions.forEach(e=> execRows.push({'Department':d.name,'Date':fmtDate(e.date),'Action Taken':e.text,'Status':e.status==='done'?'Completed':'In Progress','Before Photo URL':e.beforeImage||'','After Photo URL':e.afterImage||''})));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(execRows), 'Execution Actions');
+    const stdRows = DEPARTMENTS.map(d=>{ const st=STATE.deptData[d.id].standardization; const doneCount=st.checklist.filter(c=>c.done).length; return {'Department':d.name,'SOP Note':st.sop||'','Checklist Completed':`${doneCount}/${st.checklist.length}`,'Signed Off':st.signedOff?'Yes':'No','Signed Off By':st.signedBy||'','Sign Off Date':st.date?fmtDate(st.date):''}; });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stdRows), 'Standardization');
+    const scoreRows = []; DEPARTMENTS.forEach(d=>{ const s=STATE.deptData[d.id].scores||{}; REVIEWERS.forEach(r=>{ if(s[r.key]){ const row={'Department':d.name,'Reviewer Role':r.label,'Rated By':s[r.key]._name||'','Date':s[r.key]._date?fmtDate(s[r.key]._date):''}; S_CATS.forEach(c=> row[c.label]=s[r.key][c.k]||0); row['Total (/30)']=reviewerTotal(s[r.key]); scoreRows.push(row); } }); });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(scoreRows), 'Scores by Reviewer');
+    const avgScoreRows = DEPARTMENTS.map(d=>({'Department':d.name,'Reviewers Completed':`${deptReviewerCount(d.id)}/3`,'Average Score (%)':deptHasScore(d.id)?deptScorePct(d.id):''}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(avgScoreRows), 'Average Scores');
+    const meetingRows = STATE.meetings.map(m=>({'Date':fmtDate(m.date),'Attendees':m.attendees.join(', '),'Notes':m.notes,'Action Items':m.actionItems||''}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(meetingRows), 'Meetings');
+    const verifyRows = []; DEPARTMENTS.forEach(d=> STATE.deptData[d.id].verifications.forEach(v=> verifyRows.push({'Department':d.name,'Date':fmtDate(v.date),'Reviewer':v.reviewer,'Status':v.status==='approved'?'Approved':'Needs Work','Comment':v.comment})));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(verifyRows), 'Verifications');
+    XLSX.writeFile(wb, `6S-Audit-Export-${today()}.xlsx`);
+    showToast('Export downloaded');
+  }catch(err){ showToast('Export failed — please try again'); }
+}
+
+/* ============ MODALS ============ */
+function openModal(html, {center=false}={}){
+  const bg = document.createElement('div'); bg.className='modal-bg'+(center?' center':''); bg.id='modal-bg';
+  bg.innerHTML = `<div class="modal-sheet ${center?'card-modal':''}"><div class="modal-handle"></div>${html}</div>`;
+  bg.addEventListener('click', e=>{ if(e.target===bg) closeModal(); });
+  document.body.appendChild(bg);
+}
+function closeModal(){ const bg = document.getElementById('modal-bg'); if(bg) bg.remove(); }
+
+function modalObservation(){
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">New Observation</div>
+    <div class="form-block"><label>What needs to change?</label><textarea id="m-text" placeholder="e.g. Loose fabric rolls blocking walkway near cutting table"></textarea></div>
+    <div class="form-block"><label>Priority</label><select id="m-priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></div>
+    <div class="form-block"><label>Photo (optional)</label>
+      <label class="upload-btn">TAP TO ADD PHOTO<input type="file" accept="image/*" capture="environment" id="m-image"></label>
+      <img id="m-preview" class="thumb-preview" style="display:none;">
+    </div>
+    <button class="btn-primary" id="m-save">Save Observation</button>`);
+  setupImagePreview('m-image','m-preview');
+  document.getElementById('m-save').onclick = async ()=>{
+    const text = document.getElementById('m-text').value.trim();
+    if(!text){ showToast('Please describe the observation'); return; }
+    const saveBtn = document.getElementById('m-save');
+    const preview = document.getElementById('m-preview');
+    let imageUrl = null;
+    if(preview.dataset.img){
+      saveBtn.textContent = 'Uploading photo…'; saveBtn.disabled = true;
+      imageUrl = await uploadImageToDrive(preview.dataset.img, `obs-${STATE.activeDept}-${Date.now()}.jpg`);
+      if(!imageUrl) showToast('Photo upload failed — saving without it');
+    }
+    const dd = STATE.deptData[STATE.activeDept];
+    const entry = {id:uid(), date:today(), text, priority:document.getElementById('m-priority').value, image:imageUrl};
+    dd.observations.push(entry);
+    await kvAppend('dept-data:'+STATE.activeDept, 'observations', entry);
+    const deptName = DEPARTMENTS.find(x=>x.id===STATE.activeDept).name;
+    pushRow('Observations', {Department:deptName, Date:entry.date, Priority:entry.priority, Observation:entry.text, 'Photo URL':imageUrl||''});
+    closeModal(); render(); showToast('Observation saved');
+  };
+}
+function modalExecution(){
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">New Action — Before / After</div>
+    <div class="form-block"><label>Action taken</label><textarea id="m-text" placeholder="e.g. Installed shadow board for cutting tools"></textarea></div>
+    <div class="form-block"><label>Status</label><select id="m-status"><option value="open">In Progress</option><option value="done">Completed</option></select></div>
+    <div class="form-block"><label>Before Photo</label>
+      <label class="upload-btn">TAP TO ADD BEFORE PHOTO<input type="file" accept="image/*" capture="environment" id="m-before"></label>
+      <img id="m-before-preview" class="thumb-preview" style="display:none;">
+    </div>
+    <div class="form-block"><label>After Photo</label>
+      <label class="upload-btn">TAP TO ADD AFTER PHOTO<input type="file" accept="image/*" capture="environment" id="m-after"></label>
+      <img id="m-after-preview" class="thumb-preview" style="display:none;">
+    </div>
+    <button class="btn-primary" id="m-save">Save Action</button>`);
+  setupImagePreview('m-before','m-before-preview');
+  setupImagePreview('m-after','m-after-preview');
+  document.getElementById('m-save').onclick = async ()=>{
+    const text = document.getElementById('m-text').value.trim();
+    if(!text){ showToast('Please describe the action'); return; }
+    const saveBtn = document.getElementById('m-save');
+    const beforePrev = document.getElementById('m-before-preview');
+    const afterPrev = document.getElementById('m-after-preview');
+    let beforeUrl = null, afterUrl = null;
+    if(beforePrev.dataset.img || afterPrev.dataset.img){ saveBtn.textContent = 'Uploading photos…'; saveBtn.disabled = true; }
+    if(beforePrev.dataset.img) beforeUrl = await uploadImageToDrive(beforePrev.dataset.img, `exec-before-${STATE.activeDept}-${Date.now()}.jpg`);
+    if(afterPrev.dataset.img) afterUrl = await uploadImageToDrive(afterPrev.dataset.img, `exec-after-${STATE.activeDept}-${Date.now()}.jpg`);
+    const dd = STATE.deptData[STATE.activeDept];
+    const entry = {id:uid(), date:today(), text, status:document.getElementById('m-status').value, beforeImage:beforeUrl, afterImage:afterUrl};
+    dd.executions.push(entry);
+    await kvAppend('dept-data:'+STATE.activeDept, 'executions', entry);
+    const deptName = DEPARTMENTS.find(x=>x.id===STATE.activeDept).name;
+    pushRow('Execution Actions', {Department:deptName, Date:entry.date, Action:entry.text, Status:entry.status==='done'?'Completed':'In Progress', 'Before Photo URL':beforeUrl||'', 'After Photo URL':afterUrl||''});
+    closeModal(); render(); showToast('Action saved');
+  };
+}
+function modalMeeting(){
+  const names = ['Rajesh P R (Team Leader)','Nishanth (Coordinator)','Rajeev (Organizer)','HO Representative 1','HO Representative 2',...DEPARTMENTS.map(d=>d.incharge)];
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">Log Team Meeting</div>
+    <div class="form-block"><label>Date</label><input type="date" id="m-date" value="${today()}"></div>
+    <div class="form-block"><label>Attendees</label><div style="max-height:160px; overflow-y:auto; border:1px solid var(--line); border-radius:3px; background:var(--paper-hi); padding:4px 10px;">${names.map(n=>`<div class="chk-row"><div class="chk-box" data-attendee="${escapeHTML(n)}"></div><span>${n}</span></div>`).join('')}</div></div>
+    <div class="form-block"><label>Discussion Notes</label><textarea id="m-notes" placeholder="Key points discussed..."></textarea></div>
+    <div class="form-block"><label>Action Items</label><textarea id="m-actions" placeholder="Who does what by when..."></textarea></div>
+    <button class="btn-primary" id="m-save">Save Meeting</button>`);
+  document.querySelectorAll('[data-attendee]').forEach(el=>{ el.onclick = ()=>{ el.classList.toggle('on'); el.textContent = el.classList.contains('on')?'✓':''; }; });
+  document.getElementById('m-save').onclick = async ()=>{
+    const notes = document.getElementById('m-notes').value.trim();
+    if(!notes){ showToast('Please add discussion notes'); return; }
+    const attendees = Array.from(document.querySelectorAll('[data-attendee].on')).map(el=>el.dataset.attendee);
+    const entry = {id:uid(), date:document.getElementById('m-date').value||today(), attendees, notes, actionItems:document.getElementById('m-actions').value.trim()};
+    STATE.meetings.push(entry);
+    await kvAppend('meetings', '', entry);
+    pushRow('Meetings', {Date:entry.date, Attendees:attendees.join(', '), Notes:entry.notes, ActionItems:entry.actionItems});
+    closeModal(); render(); showToast('Meeting logged');
+  };
+}
+function modalVerify(deptId){
+  const d = DEPARTMENTS.find(x=>x.id===deptId);
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">Review — ${d.name}</div>
+    <div class="form-block"><label>Reviewer</label><select id="m-reviewer"><option>${TEAM_LEADER} (Team Leader)</option><option>HO Representative 1</option><option>HO Representative 2</option></select></div>
+    <div class="form-block"><label>Comment</label><textarea id="m-comment" placeholder="Observations from this review..."></textarea></div>
+    <div class="form-block"><label>Status</label><select id="m-status"><option value="approved">Approved</option><option value="needs-work">Needs Work</option></select></div>
+    <button class="btn-primary" id="m-save">Save Review</button>`);
+  document.getElementById('m-save').onclick = async ()=>{
+    const comment = document.getElementById('m-comment').value.trim();
+    if(!comment){ showToast('Please add a comment'); return; }
+    const entry = {id:uid(), date:today(), reviewer:document.getElementById('m-reviewer').value, comment, status:document.getElementById('m-status').value};
+    STATE.deptData[deptId].verifications.push(entry);
+    await kvAppend('dept-data:'+deptId, 'verifications', entry);
+    pushRow('Verifications', {Department:d.name, Date:entry.date, Reviewer:entry.reviewer, Status:entry.status==='approved'?'Approved':'Needs Work', Comment:entry.comment});
+    closeModal(); render(); showToast('Review saved');
+  };
+}
+function modalScore(deptId, reviewerKey){
+  const r = REVIEWERS.find(x=>x.key===reviewerKey); const d = DEPARTMENTS.find(x=>x.id===deptId);
+  const existing = (STATE.deptData[deptId].scores||{})[reviewerKey] || {}; const temp = {...existing};
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:2px;">${r.label}</div>
+    <div style="font-size:11.5px; color:var(--steel); margin-bottom:14px;">Rating ${d.name} — 1 to 5 per category</div>
+    <div class="form-block"><label>Your Name</label><input type="text" id="m-name" placeholder="Enter your full name" value="${escapeHTML(existing._name||'')}"></div>
+    ${S_CATS.map(c=>`<div class="s-cat"><div class="s-cat-top"><span class="s-cat-name">${c.label}</span><span class="s-cat-val mono" id="val-${c.k}">${temp[c.k]||0}/5</span></div><div class="stars" data-cat="${c.k}">${[1,2,3,4,5].map(n=>`<div class="star ${(temp[c.k]||0)>=n?'on':''}" data-star="${n}">${n}</div>`).join('')}</div></div>`).join('')}
+    <button class="btn-primary" id="m-save" style="margin-top:6px;">Save Rating</button>`, {center:true});
+  document.querySelectorAll('.stars').forEach(starGroup=>{
+    starGroup.querySelectorAll('.star').forEach(star=>{
+      star.onclick = ()=>{
+        const cat = starGroup.dataset.cat; temp[cat] = parseInt(star.dataset.star);
+        starGroup.querySelectorAll('.star').forEach(s=> s.classList.toggle('on', parseInt(s.dataset.star) <= temp[cat]));
+        document.getElementById('val-'+cat).textContent = temp[cat]+'/5';
+      };
+    });
+  });
+  document.getElementById('m-save').onclick = async ()=>{
+    const name = document.getElementById('m-name').value.trim();
+    if(!name){ showToast('Please enter your name'); return; }
+    if(S_CATS.some(c=>!temp[c.k])){ showToast('Please rate every category'); return; }
+    temp._name = name; temp._date = today();
+    if(!STATE.deptData[deptId].scores) STATE.deptData[deptId].scores = {};
+    STATE.deptData[deptId].scores[reviewerKey] = temp;
+    await kvMergePath('dept-data:'+deptId, 'scores', {[reviewerKey]: temp});
+    const row = {Department:d.name, ReviewerRole:r.label, RatedBy:name, Date:temp._date};
+    S_CATS.forEach(c=> row[c.label]=temp[c.k]); row['Total (/30)']=reviewerTotal(temp);
+    pushRow('Scores', row);
+    closeModal(); render(); showToast('Rating saved');
+  };
+}
+function modalNotifications(){
+  const alerts = generateAlerts();
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px; display:flex; align-items:center; gap:8px;">${ico('bell')} Alerts</div>
+    ${alerts.length===0?emptyState('All clear','No open alerts right now. Nice work keeping the floor on track.'):
+      alerts.map(a=>`<div class="alert-row" data-alert-dept="${a.dept||''}" data-alert-tab="${a.tab||''}" data-alert-view="${a.view||''}"><div class="alert-dot ${a.sev}"></div><div class="alert-text">${a.text}</div></div>`).join('')}`, {center:true});
+  document.querySelectorAll('.alert-row').forEach(el=>{
+    el.onclick = ()=>{ closeModal();
+      if(el.dataset.alertDept){ STATE.activeDept=el.dataset.alertDept; STATE.detailTab=el.dataset.alertTab||'observe'; STATE.view= el.dataset.alertView==='verify'?'verify':'deptDetail'; }
+      else if(el.dataset.alertView){ STATE.view = el.dataset.alertView; }
+      render();
+    };
+  });
+}
+
+/* ============ GLOBAL HANDLERS ============ */
+function attachGlobalHandlers(){
+  document.querySelectorAll('[data-nav]').forEach(el=>{ el.onclick = ()=>{ STATE.view = el.dataset.nav; STATE.activeDept=null; render(); }; });
+  document.querySelectorAll('[data-open-dept]').forEach(el=>{ el.onclick = ()=>{ STATE.activeDept = el.dataset.openDept; STATE.detailTab='observe'; STATE.view='deptDetail'; render(); }; });
+  document.querySelectorAll('[data-dtab]').forEach(el=>{ el.onclick = ()=>{ STATE.detailTab = el.dataset.dtab; render(); }; });
+  const addObs = document.getElementById('add-observation'); if(addObs) addObs.onclick = modalObservation;
+  const addExec = document.getElementById('add-execution'); if(addExec) addExec.onclick = modalExecution;
+  const addMeet = document.getElementById('add-meeting'); if(addMeet) addMeet.onclick = modalMeeting;
+  const exportBtn = document.getElementById('export-data'); if(exportBtn) exportBtn.onclick = exportData;
+  const alertsBtn = document.getElementById('open-alerts'); if(alertsBtn) alertsBtn.onclick = modalNotifications;
+  const changeSheet = document.getElementById('change-sheet'); if(changeSheet) changeSheet.onclick = ()=>{ localStorage.removeItem('sixs-sheets-url'); location.reload(); };
+  document.querySelectorAll('[data-add-verify]').forEach(el=>{ el.onclick = ()=>modalVerify(el.dataset.addVerify); });
+  document.querySelectorAll('[data-resolve-verify]').forEach(el=>{
+    el.onclick = async ()=>{
+      const deptId = el.dataset.resolveVerify; const verifyId = el.dataset.verifyId;
+      const dd = STATE.deptData[deptId]; const v = dd.verifications.find(x=>x.id===verifyId);
+      if(v){ v.resolved = true; await kvUpdateArrayItem('dept-data:'+deptId, 'verifications', verifyId, {resolved:true}); render(); showToast('Marked resolved'); }
+    };
+  });
+  document.querySelectorAll('[data-score-reviewer]').forEach(el=>{ el.onclick = ()=> modalScore(STATE.activeDept, el.dataset.scoreReviewer); });
+  document.querySelectorAll('[data-mark-done]').forEach(el=>{
+    el.onclick = async ()=>{ const dd = STATE.deptData[STATE.activeDept]; const ex = dd.executions.find(x=>x.id===el.dataset.markDone); if(ex){ ex.status='done'; await kvUpdateArrayItem('dept-data:'+STATE.activeDept, 'executions', ex.id, {status:'done'}); render(); showToast('Marked completed'); } };
+  });
+  document.querySelectorAll('[data-chk]').forEach(el=>{
+    el.onclick = async ()=>{ const dd = STATE.deptData[STATE.activeDept]; const c = dd.standardization.checklist.find(x=>x.id===el.dataset.chk); if(c){ c.done=!c.done; await kvUpdateArrayItem('dept-data:'+STATE.activeDept, 'standardization.checklist', c.id, {done:c.done}); render(); } };
+  });
+  const saveStd = document.getElementById('save-standard');
+  if(saveStd) saveStd.onclick = async ()=>{
+    const name = document.getElementById('signoff-name').value.trim();
+    if(!name){ showToast('Enter a name to sign off'); return; }
+    const dd = STATE.deptData[STATE.activeDept];
+    dd.standardization.sop = document.getElementById('sop-text').value.trim();
+    dd.standardization.signedOff = true; dd.standardization.signedBy = name; dd.standardization.date = today();
+    await kvMergePath('dept-data:'+STATE.activeDept, 'standardization', {sop:dd.standardization.sop, signedOff:true, signedBy:name, date:dd.standardization.date});
+    const deptName = DEPARTMENTS.find(x=>x.id===STATE.activeDept).name;
+    pushRow('Standardization', {Department:deptName, SOP:dd.standardization.sop, SignedOff:'Yes', SignedBy:name, Date:dd.standardization.date});
+    render(); showToast('Standard signed off');
+  };
+  const saveDraft = document.getElementById('save-sop-draft');
+  if(saveDraft) saveDraft.onclick = async ()=>{
+    const dd = STATE.deptData[STATE.activeDept]; const sopEl = document.getElementById('sop-text');
+    if(sopEl) dd.standardization.sop = sopEl.value.trim();
+    await kvMergePath('dept-data:'+STATE.activeDept, 'standardization', {sop:dd.standardization.sop}); render(); showToast('Draft saved');
+  };
+}
+
+/* ============ FIRST-RUN SHEET CONNECT ============ */
+function renderSetupScreen(prefill){
+  document.getElementById('app').innerHTML = `
+  <div class="setup-scr">
+    <div class="mark">6S</div>
+    <div class="disp" style="font-size:20px; margin-bottom:8px;">Connect Your Google Sheet</div>
+    <p style="font-size:13px; color:var(--steel); line-height:1.6; margin-bottom:20px;">
+      This app stores all data in a Google Sheet you control. Paste the Web App URL from your Apps Script deployment below.
+      Ask your coordinator for the setup script if you don't have this yet.
+    </p>
+    <div class="form-block"><label>Web App URL</label><input type="text" id="setup-url" placeholder="https://script.google.com/macros/s/.../exec" value="${prefill?escapeHTML(prefill):''}"></div>
+    <button class="btn-primary" id="setup-save">Connect & Continue</button>
+  </div>`;
+  document.getElementById('setup-save').onclick = async ()=>{
+    const url = document.getElementById('setup-url').value.trim();
+    if(!url){ showToast('Please paste your Web App URL'); return; }
+    localStorage.setItem('sixs-sheets-url', url);
+    STATE.sheetsUrl = url;
+    boot();
+  };
+}
+
+/* ============ INIT ============ */
+async function boot(){
+  document.getElementById('app').innerHTML = `<div class="loading-scr"><div class="spin"></div><div class="mono" style="font-size:11px;">LOADING 6S DATA…</div></div>`;
+  try{
+    await loadAll();
+    render();
+    showToast('Connected to Google Sheet');
+  }catch(err){
+    document.getElementById('app').innerHTML = `<div class="loading-scr">
+      <div class="disp" style="font-size:15px; color:var(--red);">Couldn't load the app</div>
+      <p style="font-size:12.5px; line-height:1.5; max-width:300px;">${escapeHTML(err && err.message ? err.message : String(err))}</p>
+      <p style="font-size:11.5px; color:var(--steel);">Check your Google Sheet connection, or try reconnecting below.</p>
+      <button class="btn-outline" id="boot-retry" style="margin-top:6px;">Retry</button>
+      <button class="link-btn" id="boot-reconnect" style="margin-top:14px;">Reconnect Google Sheet</button>
+    </div>`;
+    document.getElementById('boot-retry').onclick = boot;
+    document.getElementById('boot-reconnect').onclick = ()=>{ localStorage.removeItem('sixs-sheets-url'); location.reload(); };
+  }
+}
+(function init(){
+  const saved = localStorage.getItem('sixs-sheets-url');
+  if(saved){ STATE.sheetsUrl = saved; boot(); }
+  else{ renderSetupScreen(); }
+})();
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+window.addEventListener('error', (e)=>{
+  const app = document.getElementById('app');
+  if(app && app.querySelector('.loading-scr') && !app.querySelector('#boot-retry')){
+    app.innerHTML = `<div class="loading-scr">
+      <div class="disp" style="font-size:15px; color:var(--red);">Something went wrong</div>
+      <p style="font-size:12.5px; line-height:1.5; max-width:300px;">${escapeHTML(e.message||'Unknown error')}</p>
+      <button class="btn-outline" id="boot-retry" style="margin-top:6px;">Reload</button>
+    </div>`;
+    document.getElementById('boot-retry').onclick = ()=> location.reload();
+  }
+});
+</script>
+</body>
+</html>
