@@ -191,6 +191,29 @@ function emptyDeptData(){
     {id:'c5',text:'Responsible person assigned',done:false},
   ],signedOff:false,signedBy:'',date:''},scores:{},verifications:[]};
 }
+// Never trust that a fetched record is complete — a record can end up partial
+// if its very first write ever was a targeted append/merge (e.g. someone's
+// first action for a department was logging an observation) rather than a
+// full initialization. This guarantees every field the UI expects always
+// exists, no matter how the record was created or how old it is.
+function sanitizeDeptData(v){
+  const base = emptyDeptData();
+  if(!v || typeof v !== 'object') return base;
+  const std = (v.standardization && typeof v.standardization==='object') ? v.standardization : {};
+  return {
+    observations: Array.isArray(v.observations) ? v.observations : [],
+    executions: Array.isArray(v.executions) ? v.executions : [],
+    verifications: Array.isArray(v.verifications) ? v.verifications : [],
+    scores: (v.scores && typeof v.scores==='object') ? v.scores : {},
+    standardization: {
+      sop: std.sop || '',
+      checklist: Array.isArray(std.checklist) ? std.checklist : base.standardization.checklist,
+      signedOff: !!std.signedOff,
+      signedBy: std.signedBy || '',
+      date: std.date || '',
+    },
+  };
+}
 
 /* ============ GOOGLE SHEET BACKEND (replaces window.storage) ============ */
 function sheetsBase(){ return STATE.sheetsUrl; }
@@ -257,7 +280,7 @@ async function loadAll(){
   if(!STATE.startDate){ STATE.startDate = new Date().toISOString().slice(0,10); await kvSet('program-start-date', STATE.startDate); }
   for(const d of DEPARTMENTS){
     const v = await kvGet('dept-data:'+d.id);
-    STATE.deptData[d.id] = v || emptyDeptData();
+    STATE.deptData[d.id] = sanitizeDeptData(v);
   }
   STATE.meetings = (await kvGet('meetings')) || [];
 }
