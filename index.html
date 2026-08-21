@@ -508,7 +508,7 @@ function renderExecuteTab(d,dd){
   const list = dd.executions.slice().reverse();
   return `<button class="btn-primary" id="add-execution" style="margin-bottom:14px;">${ico('plus')} New Action</button>
   ${list.length===0 ? emptyState('No execution entries yet','Log corrective actions during Month 2.') :
-    list.map(e=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(e.date)}</span><span class="status-chip ${e.status==='done'?'status-done':'status-open'}">${e.status==='done'?'Completed':'In Progress'}</span></div><div class="entry-text">${escapeHTML(e.text)}</div>${(e.beforeImage||e.afterImage)?`<div class="img-row"><div class="img-box">${e.beforeImage?`<img src="${e.beforeImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">Before</div></div><div class="img-box">${e.afterImage?`<img src="${e.afterImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">After</div></div></div>`:''}${e.status!=='done'?`<button class="btn-outline btn-sm" style="margin-top:9px;" data-mark-done="${e.id}">Mark Completed</button>`:''}</div>`).join('')}`;
+    list.map(e=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(e.date)}</span><span class="status-chip ${e.status==='done'?'status-done':'status-open'}">${e.status==='done'?'Completed':'In Progress'}</span></div><div class="entry-text">${escapeHTML(e.text)}</div>${(e.beforeImage||e.afterImage)?`<div class="img-row"><div class="img-box">${e.beforeImage?`<img src="${e.beforeImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">Before</div></div><div class="img-box">${e.afterImage?`<img src="${e.afterImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">After</div></div></div>`:''}<div style="display:flex; gap:8px; margin-top:9px;">${!e.afterImage?`<button class="btn-outline btn-sm" data-add-after="${e.id}">Add After Photo</button>`:''}${e.status!=='done'?`<button class="btn-outline btn-sm" data-mark-done="${e.id}">Mark Completed</button>`:''}</div></div>`).join('')}`;
 }
 function renderPhotosTab(d,dd){
   const items = [];
@@ -654,37 +654,52 @@ function modalObservation(){
   };
 }
 function modalExecution(){
-  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">New Action — Before / After</div>
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">New Action — Before</div>
+    <div style="font-size:11.5px; color:var(--steel); margin-bottom:12px; line-height:1.5;">Log this when you start. Add the after photo separately once the area's actually cleared — no need to wait until then to log it.</div>
     <div class="form-block"><label>Action taken</label><textarea id="m-text" placeholder="e.g. Installed shadow board for cutting tools"></textarea></div>
-    <div class="form-block"><label>Status</label><select id="m-status"><option value="open">In Progress</option><option value="done">Completed</option></select></div>
     <div class="form-block"><label>Before Photo</label>
       <label class="upload-btn">TAP TO ADD BEFORE PHOTO<input type="file" accept="image/*" capture="environment" id="m-before"></label>
       <img id="m-before-preview" class="thumb-preview" style="display:none;">
     </div>
-    <div class="form-block"><label>After Photo</label>
-      <label class="upload-btn">TAP TO ADD AFTER PHOTO<input type="file" accept="image/*" capture="environment" id="m-after"></label>
-      <img id="m-after-preview" class="thumb-preview" style="display:none;">
-    </div>
     <button class="btn-primary" id="m-save">Save Action</button>`);
   setupImagePreview('m-before','m-before-preview');
-  setupImagePreview('m-after','m-after-preview');
   document.getElementById('m-save').onclick = async ()=>{
     const text = document.getElementById('m-text').value.trim();
     if(!text){ showToast('Please describe the action'); return; }
     const saveBtn = document.getElementById('m-save');
     const beforePrev = document.getElementById('m-before-preview');
-    const afterPrev = document.getElementById('m-after-preview');
-    let beforeUrl = null, afterUrl = null;
-    if(beforePrev.dataset.img || afterPrev.dataset.img){ saveBtn.textContent = 'Uploading photos…'; saveBtn.disabled = true; }
-    if(beforePrev.dataset.img) beforeUrl = await uploadImageToDrive(beforePrev.dataset.img, `exec-before-${STATE.activeDept}-${Date.now()}.jpg`);
-    if(afterPrev.dataset.img) afterUrl = await uploadImageToDrive(afterPrev.dataset.img, `exec-after-${STATE.activeDept}-${Date.now()}.jpg`);
+    let beforeUrl = null;
+    if(beforePrev.dataset.img){ saveBtn.textContent = 'Uploading photo…'; saveBtn.disabled = true; beforeUrl = await uploadImageToDrive(beforePrev.dataset.img, `exec-before-${STATE.activeDept}-${Date.now()}.jpg`); }
     const dd = STATE.deptData[STATE.activeDept];
-    const entry = {id:uid(), date:today(), text, status:document.getElementById('m-status').value, beforeImage:beforeUrl, afterImage:afterUrl};
+    const entry = {id:uid(), date:today(), text, status:'open', beforeImage:beforeUrl, afterImage:null};
     dd.executions.push(entry);
     await kvAppend('dept-data:'+STATE.activeDept, 'executions', entry);
     const deptName = DEPARTMENTS.find(x=>x.id===STATE.activeDept).name;
-    pushRow('Execution Actions', {Department:deptName, Date:entry.date, Action:entry.text, Status:entry.status==='done'?'Completed':'In Progress', 'Before Photo URL':beforeUrl||'', 'After Photo URL':afterUrl||''});
+    pushRow('Execution Actions', {Department:deptName, Date:entry.date, Action:entry.text, Status:'In Progress', 'Before Photo URL':beforeUrl||'', 'After Photo URL':''});
     closeModal(); render(); showToast('Action saved');
+  };
+}
+function modalAddAfterPhoto(execId){
+  const dd = STATE.deptData[STATE.activeDept];
+  const entry = dd.executions.find(x=>x.id===execId);
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">Add After Photo</div>
+    <div style="font-size:11.5px; color:var(--steel); margin-bottom:12px; line-height:1.5;">${escapeHTML(entry?entry.text:'')}</div>
+    <div class="form-block"><label>After Photo</label>
+      <label class="upload-btn">TAP TO ADD AFTER PHOTO<input type="file" accept="image/*" capture="environment" id="m-after"></label>
+      <img id="m-after-preview" class="thumb-preview" style="display:none;">
+    </div>
+    <button class="btn-primary" id="m-save">Save Photo</button>`);
+  setupImagePreview('m-after','m-after-preview');
+  document.getElementById('m-save').onclick = async ()=>{
+    const afterPrev = document.getElementById('m-after-preview');
+    if(!afterPrev.dataset.img){ showToast('Please add a photo'); return; }
+    const saveBtn = document.getElementById('m-save'); saveBtn.textContent = 'Uploading photo…'; saveBtn.disabled = true;
+    const afterUrl = await uploadImageToDrive(afterPrev.dataset.img, `exec-after-${STATE.activeDept}-${Date.now()}.jpg`);
+    if(entry) entry.afterImage = afterUrl;
+    await kvUpdateArrayItem('dept-data:'+STATE.activeDept, 'executions', execId, {afterImage:afterUrl});
+    const deptName = DEPARTMENTS.find(x=>x.id===STATE.activeDept).name;
+    pushRow('Execution Actions', {Department:deptName, Date:today(), Action:(entry?entry.text:'')+' (after photo added)', Status:entry&&entry.status==='done'?'Completed':'In Progress', 'Before Photo URL':'', 'After Photo URL':afterUrl||''});
+    closeModal(); render(); showToast('After photo added');
   };
 }
 function modalMeeting(){
@@ -789,6 +804,7 @@ function attachGlobalHandlers(){
     };
   });
   document.querySelectorAll('[data-score-reviewer]').forEach(el=>{ el.onclick = ()=> modalScore(STATE.activeDept, el.dataset.scoreReviewer); });
+  document.querySelectorAll('[data-add-after]').forEach(el=>{ el.onclick = ()=> modalAddAfterPhoto(el.dataset.addAfter); });
   document.querySelectorAll('[data-mark-done]').forEach(el=>{
     el.onclick = async ()=>{ const dd = STATE.deptData[STATE.activeDept]; const ex = dd.executions.find(x=>x.id===el.dataset.markDone); if(ex){ ex.status='done'; await kvUpdateArrayItem('dept-data:'+STATE.activeDept, 'executions', ex.id, {status:'done'}); render(); showToast('Marked completed'); } };
   });
