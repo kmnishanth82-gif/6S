@@ -14,7 +14,6 @@
 <meta name="apple-mobile-web-app-title" content="6S">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --paper:#F1EDE2; --paper-hi:#FAF8F1; --ink:#23262B; --steel:#4A5262; --steel-dk:#343A45;
@@ -84,6 +83,12 @@
   .status-chip{font-family:'Oswald',sans-serif; font-size:9.5px; letter-spacing:.04em; padding:3px 8px; border-radius:10px; text-transform:uppercase;}
   .status-open{background:#FBE3D0; color:var(--orange);}
   .status-done{background:#DBEEE1; color:var(--green);}
+  .sev-high{background:#F6D3CC; color:var(--red);}
+  .sev-medium{background:#FBE3D0; color:var(--orange);}
+  .sev-low{background:#F7E8B8; color:#8a6d00;}
+  .type-chip{background:#E4DFD0; color:var(--steel-dk);}
+  .ehs-banner{background:var(--steel-dk); color:var(--paper-hi); border-radius:3px; padding:10px 12px; font-size:11.5px; line-height:1.5; margin-bottom:14px;}
+  .ehs-banner b{color:var(--yellow);}
   .entry-text{font-size:13px; line-height:1.4;}
   .form-block{margin-bottom:12px;}
   .form-block label{display:block; font-family:'Oswald',sans-serif; font-size:10.5px; letter-spacing:.05em; color:var(--steel); margin-bottom:5px; text-transform:uppercase;}
@@ -176,10 +181,28 @@ const REVIEWERS = [
   {key:'hoRep1', label:'HO Representative 1', sub:'Head Office'},
   {key:'hoRep2', label:'HO Representative 2', sub:'Head Office'},
 ];
+const EHS_REPS = ['Selvam','Ashik'];
+const EHS_TYPES = [
+  {k:'incident', label:'Incident / Injury'},
+  {k:'near-miss', label:'Near Miss'},
+  {k:'hazard', label:'Hazard / Unsafe Condition'},
+  {k:'unsafe-act', label:'Unsafe Act'},
+];
+const EHS_LOCATIONS = [...DEPARTMENTS.map(d=>({id:d.id, name:d.name})), {id:'common', name:'Common / General Area'}];
+const SAFETY_WALK_ITEMS = [
+  {id:'sw1', text:'Fire extinguisher accessible & not obstructed'},
+  {id:'sw2', text:'Emergency exits clear & unlocked'},
+  {id:'sw3', text:'PPE available & being used at workstation'},
+  {id:'sw4', text:'Electrical panels closed & unobstructed'},
+  {id:'sw5', text:'MSDS / safety data sheets accessible'},
+  {id:'sw6', text:'First aid kit stocked & accessible'},
+  {id:'sw7', text:'Walkway markings intact, no obstructions'},
+  {id:'sw8', text:'No trip / slip hazards observed'},
+];
 
 let STATE = {
-  view:'home', activeDept:null, detailTab:'observe', startDate:null,
-  deptData:{}, meetings:[], sheetsUrl:'',
+  view:'home', activeDept:null, detailTab:'observe', ehsTab:'log', startDate:null,
+  deptData:{}, meetings:[], ehsLog:[], safetyWalks:[], sheetsUrl:'',
 };
 
 function emptyDeptData(){
@@ -276,13 +299,40 @@ function setupImagePreview(inputId, previewId){
   });
 }
 async function loadAll(){
-  STATE.startDate = await kvGet('program-start-date');
+  const deptKeys = DEPARTMENTS.map(d=>'dept-data:'+d.id);
+  const allKeys = ['program-start-date', ...deptKeys, 'meetings', 'ehs-log', 'safety-walks'];
+  const values = await kvBulkGet(allKeys);
+  STATE.startDate = values['program-start-date'] || null;
   if(!STATE.startDate){ STATE.startDate = new Date().toISOString().slice(0,10); await kvSet('program-start-date', STATE.startDate); }
-  for(const d of DEPARTMENTS){
-    const v = await kvGet('dept-data:'+d.id);
-    STATE.deptData[d.id] = sanitizeDeptData(v);
-  }
-  STATE.meetings = (await kvGet('meetings')) || [];
+  DEPARTMENTS.forEach(d=>{ STATE.deptData[d.id] = sanitizeDeptData(values['dept-data:'+d.id]); });
+  STATE.meetings = values['meetings'] || [];
+  STATE.ehsLog = values['ehs-log'] || [];
+  STATE.safetyWalks = values['safety-walks'] || [];
+}
+async function kvBulkGet(keys){
+  try{
+    const res = await fetch(sheetsBase(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'kvbulkget', keys})});
+    const data = await res.json();
+    return (data && data.status==='ok') ? data.values : {};
+  }catch(e){ return {}; }
+}
+// ============ LOCAL CACHE (instant repeat loads) ============
+// Snapshot of everything loadAll() fetches, saved to localStorage after every
+// successful load. On the next open, this renders immediately while a fresh
+// copy is fetched from the Sheet in the background — so the app never shows
+// a blank spinner just because the network/Apps Script is slow, only on the
+// very first-ever load on a device.
+function cacheSnapshot(){
+  try{
+    localStorage.setItem('sixs-data-cache', JSON.stringify({
+      startDate:STATE.startDate, deptData:STATE.deptData, meetings:STATE.meetings,
+      ehsLog:STATE.ehsLog, safetyWalks:STATE.safetyWalks,
+    }));
+  }catch(e){ /* storage unavailable/full — safe to skip, just means no instant reload next time */ }
+}
+function loadCachedSnapshot(){
+  try{ const raw = localStorage.getItem('sixs-data-cache'); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
 }
 // These three are the SAFE way to write shared/concurrent data: each one asks the
 // Sheet backend to make a narrow, locked change to only the field in question,
@@ -353,6 +403,20 @@ function deptPhaseProgress(deptId){
 }
 function escapeHTML(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 function emptyState(title, sub){ return `<div class="empty-state"><div class="ico">◻</div><div class="disp" style="font-size:12.5px;">${title}</div><p>${sub}</p></div>`; }
+function ehsTypeLabel(k){ const t = EHS_TYPES.find(x=>x.k===k); return t?t.label:k; }
+function ehsLocationName(id){ const l = EHS_LOCATIONS.find(x=>x.id===id); return l?l.name:id; }
+function ehsOpenCount(){ return STATE.ehsLog.filter(x=>x.status!=='closed').length; }
+function ehsOpenHighCount(){ return STATE.ehsLog.filter(x=>x.status!=='closed' && x.severity==='high').length; }
+function deptLastWalkDate(deptId){
+  const walks = STATE.safetyWalks.filter(w=>w.department===deptId);
+  if(!walks.length) return null;
+  return walks.reduce((a,w)=> w.date>a?w.date:a, walks[0].date);
+}
+function deptWalkAvgScore(deptId){
+  const walks = STATE.safetyWalks.filter(w=>w.department===deptId);
+  if(!walks.length) return null;
+  return Math.round(walks.reduce((a,w)=>a+w.score,0)/walks.length);
+}
 
 /* ============ ICONS ============ */
 const ICONS = {
@@ -365,6 +429,7 @@ const ICONS = {
   back:'<path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   bell:'<path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M10 18.5a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>',
   camera:'<path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  alert:'<path d="M12 3.5 21.5 20h-19L12 3.5Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M12 9.5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.05" fill="currentColor"/>',
 };
 function ico(name, cls){ return `<svg class="${cls||''}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${ICONS[name]}</svg>`; }
 
@@ -385,6 +450,17 @@ function generateAlerts(){
     }
   });
   if(STATE.meetings.length===0 || daysSince(STATE.meetings[STATE.meetings.length-1].date) > 7) alerts.push({sev:'yellow', text:'No team meeting logged in the last 7 days', view:'meetings'});
+  STATE.ehsLog.forEach(x=>{
+    if(x.status==='closed') return;
+    const stale = daysSince(x.date) > (x.severity==='high'?2:7);
+    const sev = x.severity==='high' ? 'red' : (x.severity==='medium' ? 'orange' : 'yellow');
+    alerts.push({sev: stale?'red':sev, text:`${ehsTypeLabel(x.type)} open at ${ehsLocationName(x.location)}${stale?' — unresolved '+daysSince(x.date)+' days':''}`, view:'ehs'});
+  });
+  DEPARTMENTS.forEach(d=>{
+    const last = deptLastWalkDate(d.id);
+    if(!last) alerts.push({sev:'yellow', text:`No safety walk logged yet for ${d.name}`, view:'ehs'});
+    else if(daysSince(last) > 30) alerts.push({sev:'orange', text:`Safety walk overdue in ${d.name} — last done ${daysSince(last)} days ago`, view:'ehs'});
+  });
   return alerts;
 }
 
@@ -396,11 +472,13 @@ function render(){
   else if(STATE.view==='depts') body = renderDeptList();
   else if(STATE.view==='deptDetail') body = renderDeptDetail();
   else if(STATE.view==='meetings') body = renderMeetings();
+  else if(STATE.view==='ehs') body = renderEHS();
   else if(STATE.view==='verify') body = renderVerify();
   else if(STATE.view==='score') body = renderScore();
   const showTopHeader = STATE.view!=='deptDetail';
   app.innerHTML = `${showTopHeader ? headerHTML() : ''}<main style="${showTopHeader?'':'padding:0;'}">${body}</main>${bottomNavHTML()}`;
   attachGlobalHandlers();
+  cacheSnapshot();
 }
 function headerHTML(){
   const phaseIdx = currentPhaseIndex(); const days = daysIntoProgram(); const alertCount = generateAlerts().length;
@@ -420,7 +498,7 @@ function headerHTML(){
   <div class="hazard"></div>`;
 }
 function bottomNavHTML(){
-  const tabs = [{v:'home',ic:'home',l:'Home'},{v:'depts',ic:'grid',l:'Depts'},{v:'meetings',ic:'calendar',l:'Meet'},{v:'verify',ic:'shield',l:'Verify'},{v:'score',ic:'gauge',l:'Score'}];
+  const tabs = [{v:'home',ic:'home',l:'Home'},{v:'depts',ic:'grid',l:'Depts'},{v:'ehs',ic:'alert',l:'EHS'},{v:'meetings',ic:'calendar',l:'Meet'},{v:'verify',ic:'shield',l:'Verify'},{v:'score',ic:'gauge',l:'Score'}];
   return `<nav class="bottom">${tabs.map(t=>`<button class="nb ${STATE.view===t.v||(t.v==='depts'&&STATE.view==='deptDetail')?'active':''}" data-nav="${t.v}">${ico(t.ic)}<span>${t.l}</span></button>`).join('')}</nav>`;
 }
 
@@ -443,6 +521,13 @@ function renderHome(){
   </div>
   <div class="section-title">Department Status</div>
   ${DEPARTMENTS.map(deptRowMini).join('')}
+  <div class="section-title">EHS Snapshot</div>
+  <div class="card" data-nav="ehs" style="cursor:pointer;">
+    <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);">
+      <div class="stat"><div class="n mono" style="color:${ehsOpenCount()?'var(--orange)':'var(--green)'}">${ehsOpenCount()}</div><div class="l">Open EHS Items</div></div>
+      <div class="stat"><div class="n mono" style="color:${ehsOpenHighCount()?'var(--red)':'var(--green)'}">${ehsOpenHighCount()}</div><div class="l">High Severity</div></div>
+    </div>
+  </div>
   <div class="section-title">Team</div>
   <div class="card" style="font-size:12.5px; line-height:1.9;">
     <div><b>Team Leader:</b> ${TEAM_LEADER}</div>
@@ -502,13 +587,13 @@ function renderObserveTab(d,dd){
   const list = dd.observations.slice().reverse();
   return `<button class="btn-primary" id="add-observation" style="margin-bottom:14px;">${ico('plus')} New Observation</button>
   ${list.length===0 ? emptyState('No observations logged yet','Record what needs to change during Month 1 identification walk-throughs.') :
-    list.map(o=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(o.date)}</span><span class="status-chip ${o.priority==='high'?'status-open':'status-done'}">${o.priority} priority</span></div><div class="entry-text">${escapeHTML(o.text)}</div>${o.image?`<img src="${o.image}" class="entry-img">`:''}</div>`).join('')}`;
+    list.map(o=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(o.date)}</span><span class="status-chip ${o.priority==='high'?'status-open':'status-done'}">${o.priority} priority</span></div><div class="entry-text">${escapeHTML(o.text)}</div>${o.image?`<img src="${o.image}" class="entry-img" loading="lazy">`:''}</div>`).join('')}`;
 }
 function renderExecuteTab(d,dd){
   const list = dd.executions.slice().reverse();
   return `<button class="btn-primary" id="add-execution" style="margin-bottom:14px;">${ico('plus')} New Action</button>
   ${list.length===0 ? emptyState('No execution entries yet','Log corrective actions during Month 2.') :
-    list.map(e=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(e.date)}</span><span class="status-chip ${e.status==='done'?'status-done':'status-open'}">${e.status==='done'?'Completed':'In Progress'}</span></div><div class="entry-text">${escapeHTML(e.text)}</div>${(e.beforeImage||e.afterImage)?`<div class="img-row"><div class="img-box">${e.beforeImage?`<img src="${e.beforeImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">Before</div></div><div class="img-box">${e.afterImage?`<img src="${e.afterImage}">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">After</div></div></div>`:''}<div style="display:flex; gap:8px; margin-top:9px;">${!e.afterImage?`<button class="btn-outline btn-sm" data-add-after="${e.id}">Add After Photo</button>`:''}${e.status!=='done'?`<button class="btn-outline btn-sm" data-mark-done="${e.id}">Mark Completed</button>`:''}</div></div>`).join('')}`;
+    list.map(e=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(e.date)}</span><span class="status-chip ${e.status==='done'?'status-done':'status-open'}">${e.status==='done'?'Completed':'In Progress'}</span></div><div class="entry-text">${escapeHTML(e.text)}</div>${(e.beforeImage||e.afterImage)?`<div class="img-row"><div class="img-box">${e.beforeImage?`<img src="${e.beforeImage}" loading="lazy">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">Before</div></div><div class="img-box">${e.afterImage?`<img src="${e.afterImage}" loading="lazy">`:'<div style="height:90px;border:1px dashed var(--line);border-radius:3px;"></div>'}<div class="cap">After</div></div></div>`:''}<div style="display:flex; gap:8px; margin-top:9px;">${!e.afterImage?`<button class="btn-outline btn-sm" data-add-after="${e.id}">Add After Photo</button>`:''}${e.status!=='done'?`<button class="btn-outline btn-sm" data-mark-done="${e.id}">Mark Completed</button>`:''}</div></div>`).join('')}`;
 }
 function renderPhotosTab(d,dd){
   const items = [];
@@ -520,7 +605,7 @@ function renderPhotosTab(d,dd){
   items.sort((a,b)=> a.date.localeCompare(b.date));
   if(items.length===0) return emptyState('No photos yet', 'Photos added in Observe or Execute will appear here as a timeline, oldest to newest — useful for a before/after view across the full 90 days.');
   return `<div style="font-size:11.5px; color:var(--steel); margin-bottom:14px; line-height:1.5;">${items.length} photo${items.length>1?'s':''}, oldest to newest — a visual record of change in this department.</div>
-    ${items.map(it=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(it.date)}</span><span class="status-chip ${it.label==='After'?'status-done':it.label==='Before'?'status-open':'status-done'}">${it.label}</span></div><img src="${it.img}" style="width:100%; max-height:220px; object-fit:cover; border-radius:3px; border:1px solid var(--line);">${it.sub?`<div class="entry-text" style="margin-top:8px;">${escapeHTML(it.sub)}</div>`:''}</div>`).join('')}`;
+    ${items.map(it=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(it.date)}</span><span class="status-chip ${it.label==='After'?'status-done':it.label==='Before'?'status-open':'status-done'}">${it.label}</span></div><img src="${it.img}" style="width:100%; max-height:220px; object-fit:cover; border-radius:3px; border:1px solid var(--line);" loading="lazy">${it.sub?`<div class="entry-text" style="margin-top:8px;">${escapeHTML(it.sub)}</div>`:''}</div>`).join('')}`;
 }
 function renderStandardTab(d,dd){
   const st = dd.standardization;
@@ -556,6 +641,66 @@ function renderMeetings(){
    list.map(m=>`<div class="entry"><div class="entry-meta"><span class="entry-date mono">${fmtDate(m.date)}</span><span class="status-chip status-done">${m.attendees.length} attendees</span></div><div class="entry-text" style="margin-bottom:6px;"><b>Notes:</b> ${escapeHTML(m.notes)}</div>${m.actionItems?`<div class="entry-text"><b>Action items:</b> ${escapeHTML(m.actionItems)}</div>`:''}<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:5px;">${m.attendees.map(a=>`<span class="status-chip" style="background:#EDE9DC; color:var(--steel-dk);">${escapeHTML(a)}</span>`).join('')}</div></div>`).join('')}`;
 }
 
+/* ============ RENDER: EHS ============ */
+function renderEHS(){
+  const tabs = [{k:'log',l:'Incident Log'},{k:'walks',l:'Safety Walks'}];
+  return `<div class="section-title">Environment, Health &amp; Safety</div>
+  <div class="ehs-banner">EHS Representatives: <b>${EHS_REPS.join(', ')}</b> — report any injury, near miss, or unsafe condition here as soon as it's noticed.</div>
+  <div class="detail-tabs" style="margin-bottom:14px;">${tabs.map(t=>`<button class="dtab ${STATE.ehsTab===t.k?'active':''}" data-ehs-tab="${t.k}">${t.l}</button>`).join('')}</div>
+  ${STATE.ehsTab==='walks' ? renderEHSWalksTab() : renderEHSLogTab()}`;
+}
+function renderEHSLogTab(){
+  const list = STATE.ehsLog.slice().reverse();
+  const openCount = ehsOpenCount(); const highCount = ehsOpenHighCount();
+  const closedThisMonth = STATE.ehsLog.filter(x=>x.status==='closed' && x.closedDate && x.closedDate.slice(0,7)===today().slice(0,7)).length;
+  return `<button class="btn-primary" id="add-ehs" style="margin-bottom:14px;">${ico('plus')} Report Incident / Hazard</button>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="stat-grid">
+      <div class="stat"><div class="n mono" style="color:${openCount?'var(--orange)':'var(--green)'}">${openCount}</div><div class="l">Open</div></div>
+      <div class="stat"><div class="n mono" style="color:${highCount?'var(--red)':'var(--green)'}">${highCount}</div><div class="l">High Severity</div></div>
+      <div class="stat"><div class="n mono" style="color:var(--green)">${closedThisMonth}</div><div class="l">Closed This Month</div></div>
+    </div>
+  </div>
+  ${list.length===0 ? emptyState('No EHS entries yet','Log incidents, near misses, hazards, or unsafe acts as they are spotted on the floor.') :
+    list.map(x=>`<div class="entry">
+      <div class="entry-meta">
+        <span class="entry-date mono">${fmtDate(x.date)}</span>
+        <span class="status-chip ${x.status==='closed'?'status-done':'status-open'}">${x.status==='closed'?'Closed':'Open'}</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:7px;">
+        <span class="status-chip type-chip">${ehsTypeLabel(x.type)}</span>
+        <span class="status-chip sev-${x.severity}">${x.severity} severity</span>
+        <span class="status-chip type-chip">${escapeHTML(ehsLocationName(x.location))}</span>
+      </div>
+      <div class="entry-text">${escapeHTML(x.description)}</div>
+      ${x.image?`<img src="${x.image}" class="entry-img" loading="lazy">`:''}
+      <div style="font-size:11px; color:var(--steel); margin-top:7px;">Reported by ${escapeHTML(x.reportedBy||'—')}</div>
+      ${x.status==='closed' ? `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line); font-size:12.5px;"><b>Corrective action:</b> ${escapeHTML(x.correctiveAction||'—')}<div style="font-size:11px; color:var(--steel); margin-top:4px;">Closed by ${escapeHTML(x.closedBy||'—')} · ${fmtDate(x.closedDate)}</div></div>`
+        : `<button class="btn-outline btn-sm" style="margin-top:9px;" data-resolve-ehs="${x.id}">Add Corrective Action &amp; Close</button>`}
+    </div>`).join('')}`;
+}
+function renderEHSWalksTab(){
+  const list = STATE.safetyWalks.slice().reverse();
+  return `<button class="btn-primary" id="add-safety-walk" style="margin-bottom:14px;">${ico('plus')} New Safety Walk</button>
+  <div class="section-title">Walk Score by Department</div>
+  <div class="card" style="margin-bottom:14px;">${DEPARTMENTS.map(d=>{
+    const avg = deptWalkAvgScore(d.id); const last = deptLastWalkDate(d.id);
+    return `<div class="leader-row"><div style="flex:1;"><div style="font-size:12.5px; font-family:'Oswald',sans-serif;">${d.name}</div><div style="font-size:10.5px; color:var(--steel); margin-top:2px;">${last?`Last walk: ${fmtDate(last)}`:'No walk yet'}</div></div><span class="leader-pct mono">${avg!==null?avg+'%':'—'}</span></div>`;
+  }).join('')}</div>
+  <div class="section-title">Recent Walks</div>
+  ${list.length===0 ? emptyState('No safety walks logged yet','Log a walk to check fire safety, PPE, exits, and housekeeping against a fixed checklist.') :
+    list.map(w=>{
+      const d = DEPARTMENTS.find(x=>x.id===w.department);
+      const failed = w.items.filter(i=>!i.ok);
+      return `<div class="entry">
+        <div class="entry-meta"><span class="entry-date mono">${fmtDate(w.date)}</span><span class="status-chip ${w.score>=80?'status-done':'status-open'}">${w.score}%</span></div>
+        <div class="entry-text" style="margin-bottom:6px;"><b>${escapeHTML(d?d.name:w.department)}</b> · Conducted by ${escapeHTML(w.conductedBy)}</div>
+        ${failed.length ? `<div style="font-size:12px; color:var(--red);">${failed.length} item${failed.length>1?'s':''} failed: ${failed.map(i=>escapeHTML(i.text)).join(', ')}</div>` : `<div style="font-size:12px; color:var(--green);">All items passed</div>`}
+        ${w.notes?`<div class="entry-text" style="margin-top:6px;">${escapeHTML(w.notes)}</div>`:''}
+      </div>`;
+    }).join('')}`;
+}
+
 /* ============ RENDER: VERIFY ============ */
 function renderVerify(){
   return `<div class="section-title">Verification & Review</div>
@@ -586,8 +731,26 @@ function renderScore(){
 }
 
 /* ============ EXPORT ============ */
-function exportData(){
-  if(typeof XLSX === 'undefined'){ showToast('Export library did not load — check connection'); return; }
+let _xlsxLoading = null;
+function loadXLSXLib(){
+  if(typeof XLSX !== 'undefined') return Promise.resolve();
+  if(_xlsxLoading) return _xlsxLoading;
+  _xlsxLoading = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = resolve; s.onerror = ()=>reject(new Error('Failed to load export library'));
+    document.head.appendChild(s);
+  });
+  return _xlsxLoading;
+}
+async function exportData(){
+  const btn = document.getElementById('export-data');
+  if(typeof XLSX === 'undefined'){
+    if(btn){ btn.disabled = true; btn.textContent = 'Loading export tool…'; }
+    try{ await loadXLSXLib(); }
+    catch(e){ showToast('Export library did not load — check connection'); if(btn){ btn.disabled=false; btn.innerHTML = `${ico('grid')} Export Full Data (Excel)`; } return; }
+    if(btn){ btn.disabled = false; btn.innerHTML = `${ico('grid')} Export Full Data (Excel)`; }
+  }
   try{
     const wb = XLSX.utils.book_new();
     const overviewRows = DEPARTMENTS.map(d=>{
@@ -607,6 +770,13 @@ function exportData(){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(avgScoreRows), 'Average Scores');
     const meetingRows = STATE.meetings.map(m=>({'Date':fmtDate(m.date),'Attendees':m.attendees.join(', '),'Notes':m.notes,'Action Items':m.actionItems||''}));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(meetingRows), 'Meetings');
+    const ehsRows = STATE.ehsLog.map(x=>({'Date':fmtDate(x.date),'Type':ehsTypeLabel(x.type),'Location':ehsLocationName(x.location),'Severity':x.severity,'Description':x.description,'Reported By':x.reportedBy||'','Status':x.status==='closed'?'Closed':'Open','Corrective Action':x.correctiveAction||'','Closed By':x.closedBy||'','Closed Date':x.closedDate?fmtDate(x.closedDate):'','Photo URL':x.image||''}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ehsRows), 'EHS Log');
+    const walkRows = STATE.safetyWalks.map(w=>{
+      const d = DEPARTMENTS.find(x=>x.id===w.department); const failed = w.items.filter(i=>!i.ok);
+      return {'Department':d?d.name:w.department,'Date':fmtDate(w.date),'Conducted By':w.conductedBy,'Score (%)':w.score,'Failed Items':failed.map(i=>i.text).join('; '),'Notes':w.notes||''};
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(walkRows), 'Safety Walks');
     const verifyRows = []; DEPARTMENTS.forEach(d=> STATE.deptData[d.id].verifications.forEach(v=> verifyRows.push({'Department':d.name,'Date':fmtDate(v.date),'Reviewer':v.reviewer,'Status':v.status==='approved'?'Approved':'Needs Work','Comment':v.comment})));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(verifyRows), 'Verifications');
     XLSX.writeFile(wb, `6S-Audit-Export-${today()}.xlsx`);
@@ -722,6 +892,111 @@ function modalMeeting(){
     closeModal(); render(); showToast('Meeting logged');
   };
 }
+function modalEHS(){
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">Report Incident / Hazard</div>
+    <div class="form-block"><label>Type</label><select id="m-type">${EHS_TYPES.map(t=>`<option value="${t.k}">${t.label}</option>`).join('')}</select></div>
+    <div class="form-block"><label>Location</label><select id="m-location">${EHS_LOCATIONS.map(l=>`<option value="${l.id}">${escapeHTML(l.name)}</option>`).join('')}</select></div>
+    <div class="form-block"><label>Severity</label><select id="m-severity"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
+    <div class="form-block"><label>What happened?</label><textarea id="m-text" placeholder="e.g. Fire extinguisher missing from mount near Cutting entrance"></textarea></div>
+    <div class="form-block"><label>Reported By</label><input type="text" id="m-reporter" placeholder="Your name"></div>
+    <div class="form-block"><label>Photo (optional)</label>
+      <label class="upload-btn">TAP TO ADD PHOTO<input type="file" accept="image/*" capture="environment" id="m-image"></label>
+      <img id="m-preview" class="thumb-preview" style="display:none;">
+    </div>
+    <button class="btn-primary" id="m-save">Save Report</button>`);
+  setupImagePreview('m-image','m-preview');
+  document.getElementById('m-save').onclick = async ()=>{
+    const text = document.getElementById('m-text').value.trim();
+    const reporter = document.getElementById('m-reporter').value.trim();
+    if(!text){ showToast('Please describe what happened'); return; }
+    if(!reporter){ showToast('Please enter who is reporting this'); return; }
+    const saveBtn = document.getElementById('m-save');
+    const preview = document.getElementById('m-preview');
+    let imageUrl = null;
+    if(preview.dataset.img){
+      saveBtn.textContent = 'Uploading photo…'; saveBtn.disabled = true;
+      imageUrl = await uploadImageToDrive(preview.dataset.img, `ehs-${Date.now()}.jpg`);
+      if(!imageUrl) showToast('Photo upload failed — saving without it');
+    }
+    const entry = {
+      id:uid(), date:today(), type:document.getElementById('m-type').value, location:document.getElementById('m-location').value,
+      severity:document.getElementById('m-severity').value, description:text, reportedBy:reporter, image:imageUrl,
+      status:'open', correctiveAction:'', closedBy:'', closedDate:'',
+    };
+    STATE.ehsLog.push(entry);
+    await kvAppend('ehs-log', '', entry);
+    pushRow('EHS Incidents', {Date:entry.date, Type:ehsTypeLabel(entry.type), Location:ehsLocationName(entry.location), Severity:entry.severity, Description:entry.description, 'Reported By':entry.reportedBy, Status:'Open', 'Photo URL':imageUrl||''});
+    closeModal(); render(); showToast('EHS report saved');
+  };
+}
+function modalEHSResolve(id){
+  const entry = STATE.ehsLog.find(x=>x.id===id);
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:6px;">Close EHS Item</div>
+    <div style="font-size:11.5px; color:var(--steel); margin-bottom:14px; line-height:1.5;">${escapeHTML(entry?entry.description:'')}</div>
+    <div class="form-block"><label>Corrective Action Taken</label><textarea id="m-action" placeholder="What was done to fix/resolve this..."></textarea></div>
+    <div class="form-block"><label>Closed By</label><input type="text" id="m-closer" placeholder="Your name"></div>
+    <button class="btn-primary" id="m-save">Close Item</button>`);
+  document.getElementById('m-save').onclick = async ()=>{
+    const action = document.getElementById('m-action').value.trim();
+    const closer = document.getElementById('m-closer').value.trim();
+    if(!action){ showToast('Please describe the corrective action'); return; }
+    if(!closer){ showToast('Please enter your name'); return; }
+    const patch = {status:'closed', correctiveAction:action, closedBy:closer, closedDate:today()};
+    if(entry) Object.assign(entry, patch);
+    await kvUpdateArrayItem('ehs-log', '', id, patch);
+    if(entry) pushRow('EHS Incidents', {Date:entry.date, Type:ehsTypeLabel(entry.type), Location:ehsLocationName(entry.location), Severity:entry.severity, Description:entry.description+' (closed)', 'Reported By':entry.reportedBy, Status:'Closed', 'Photo URL':entry.image||''});
+    closeModal(); render(); showToast('EHS item closed');
+  };
+}
+function modalSafetyWalk(){
+  const walkState = {}; SAFETY_WALK_ITEMS.forEach(i=> walkState[i.id] = true);
+  openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">New Safety Walk</div>
+    <div class="form-block"><label>Department</label><select id="w-dept">${DEPARTMENTS.map(d=>`<option value="${d.id}">${escapeHTML(d.name)}</option>`).join('')}</select></div>
+    <div class="form-block"><label>Conducted By</label><input type="text" id="w-by" placeholder="Your name"></div>
+    <div class="form-block"><label>Checklist</label>
+      ${SAFETY_WALK_ITEMS.map(i=>`<div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--line);">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:12.5px; flex:1;">${escapeHTML(i.text)}</span>
+          <button type="button" class="btn-outline btn-sm" data-walk-toggle="${i.id}" style="color:var(--green); border-color:var(--green); flex-shrink:0;">PASS</button>
+        </div>
+        <input type="text" data-walk-note="${i.id}" placeholder="Note (if failed)" style="width:100%; border:1px solid var(--line); background:var(--paper-hi); border-radius:3px; padding:7px 9px; font-size:12px; font-family:'Inter',sans-serif;">
+      </div>`).join('')}
+    </div>
+    <div class="form-block"><label>Overall Notes (optional)</label><textarea id="w-notes" placeholder="Anything else observed..."></textarea></div>
+    <button class="btn-primary" id="m-save">Save Walk</button>`);
+  document.querySelectorAll('[data-walk-toggle]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.dataset.walkToggle; walkState[id] = !walkState[id];
+      if(walkState[id]){ btn.textContent='PASS'; btn.style.color='var(--green)'; btn.style.borderColor='var(--green)'; }
+      else{ btn.textContent='FAIL'; btn.style.color='var(--red)'; btn.style.borderColor='var(--red)'; }
+    };
+  });
+  document.getElementById('m-save').onclick = async ()=>{
+    const dept = document.getElementById('w-dept').value;
+    const conductedBy = document.getElementById('w-by').value.trim();
+    if(!conductedBy){ showToast('Please enter who conducted the walk'); return; }
+    const items = SAFETY_WALK_ITEMS.map(i=>{
+      const noteEl = document.querySelector(`[data-walk-note="${i.id}"]`);
+      return {id:i.id, text:i.text, ok:walkState[i.id], note: noteEl ? noteEl.value.trim() : ''};
+    });
+    const passCount = items.filter(i=>i.ok).length;
+    const score = Math.round((passCount/items.length)*100);
+    const entry = {id:uid(), date:today(), department:dept, conductedBy, items, score, notes:document.getElementById('w-notes').value.trim()};
+    STATE.safetyWalks.push(entry);
+    await kvAppend('safety-walks', '', entry);
+    const deptName = DEPARTMENTS.find(x=>x.id===dept).name;
+    pushRow('Safety Walks', {Department:deptName, Date:entry.date, 'Conducted By':conductedBy, 'Score (%)':score, 'Failed Items':items.filter(i=>!i.ok).map(i=>i.text).join('; '), Notes:entry.notes});
+    for(const it of items){
+      if(it.ok) continue;
+      const ehsEntry = {id:uid(), date:entry.date, type:'hazard', location:dept, severity:'medium', description:`Safety walk: ${it.text}${it.note?' — '+it.note:''}`, reportedBy:conductedBy, image:null, status:'open', correctiveAction:'', closedBy:'', closedDate:''};
+      STATE.ehsLog.push(ehsEntry);
+      await kvAppend('ehs-log', '', ehsEntry);
+      pushRow('EHS Incidents', {Date:ehsEntry.date, Type:ehsTypeLabel(ehsEntry.type), Location:ehsLocationName(ehsEntry.location), Severity:ehsEntry.severity, Description:ehsEntry.description, 'Reported By':ehsEntry.reportedBy, Status:'Open', 'Photo URL':''});
+    }
+    closeModal(); render();
+    showToast(items.every(i=>i.ok) ? 'Walk saved — all clear' : 'Walk saved — issues logged to EHS');
+  };
+}
 function modalVerify(deptId){
   const d = DEPARTMENTS.find(x=>x.id===deptId);
   openModal(`<div class="disp" style="font-size:14px; margin-bottom:14px;">Review — ${d.name}</div>
@@ -792,6 +1067,10 @@ function attachGlobalHandlers(){
   const addObs = document.getElementById('add-observation'); if(addObs) addObs.onclick = modalObservation;
   const addExec = document.getElementById('add-execution'); if(addExec) addExec.onclick = modalExecution;
   const addMeet = document.getElementById('add-meeting'); if(addMeet) addMeet.onclick = modalMeeting;
+  const addEhs = document.getElementById('add-ehs'); if(addEhs) addEhs.onclick = modalEHS;
+  document.querySelectorAll('[data-resolve-ehs]').forEach(el=>{ el.onclick = ()=> modalEHSResolve(el.dataset.resolveEhs); });
+  document.querySelectorAll('[data-ehs-tab]').forEach(el=>{ el.onclick = ()=>{ STATE.ehsTab = el.dataset.ehsTab; render(); }; });
+  const addWalk = document.getElementById('add-safety-walk'); if(addWalk) addWalk.onclick = modalSafetyWalk;
   const exportBtn = document.getElementById('export-data'); if(exportBtn) exportBtn.onclick = exportData;
   const alertsBtn = document.getElementById('open-alerts'); if(alertsBtn) alertsBtn.onclick = modalNotifications;
   const changeSheet = document.getElementById('change-sheet'); if(changeSheet) changeSheet.onclick = ()=>{ localStorage.removeItem('sixs-sheets-url'); location.reload(); };
@@ -855,9 +1134,22 @@ function renderSetupScreen(prefill){
 
 /* ============ INIT ============ */
 async function boot(){
+  const cached = loadCachedSnapshot();
+  if(cached){
+    // Instant path: paint last-known data right away, then quietly refresh from
+    // the Sheet in the background. If the refresh fails (offline, bad URL), the
+    // person still has a usable app instead of a stuck spinner.
+    STATE.startDate = cached.startDate; STATE.deptData = cached.deptData || {};
+    STATE.meetings = cached.meetings || []; STATE.ehsLog = cached.ehsLog || []; STATE.safetyWalks = cached.safetyWalks || [];
+    render();
+    try{ await loadAll(); cacheSnapshot(); render(); }
+    catch(err){ showToast('Could not refresh — showing last saved data'); }
+    return;
+  }
   document.getElementById('app').innerHTML = `<div class="loading-scr"><div class="spin"></div><div class="mono" style="font-size:11px;">LOADING 6S DATA…</div></div>`;
   try{
     await loadAll();
+    cacheSnapshot();
     render();
     showToast('Connected to Google Sheet');
   }catch(err){
